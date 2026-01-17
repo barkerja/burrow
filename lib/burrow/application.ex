@@ -36,14 +36,9 @@ defmodule Burrow.Application do
     server_config = Application.get_env(:burrow, :server, [])
     port = Keyword.get(server_config, :port, 4000)
 
-    # Cluster supervisor for distributed Erlang (only if configured)
-    cluster_children =
-      case Application.get_env(:libcluster, :topologies) do
-        nil -> []
-        topologies -> [{Cluster.Supervisor, [topologies, [name: Burrow.ClusterSupervisor]]}]
-      end
-
-    cluster_children ++ [
+    [
+      {DNSCluster, query: Application.get_env(:burrow, :dns_cluster_query) || :ignore},
+      Burrow.ClusterMonitor,
       {Burrow.Server.Supervisor, port: port}
     ]
   end

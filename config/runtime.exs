@@ -47,14 +47,20 @@ if config_env() == :prod do
   if github_client_id = System.get_env("GITHUB_CLIENT_ID") do
     config :ueberauth, Ueberauth.Strategy.Github.OAuth,
       client_id: github_client_id,
-      client_secret: System.get_env("GITHUB_CLIENT_SECRET") || raise("GITHUB_CLIENT_SECRET required when GITHUB_CLIENT_ID is set")
+      client_secret:
+        System.get_env("GITHUB_CLIENT_SECRET") ||
+          raise("GITHUB_CLIENT_SECRET required when GITHUB_CLIENT_ID is set")
   end
 
   # Inspector authorization config
   if allowed_users = System.get_env("INSPECTOR_ALLOWED_USERS") do
     config :burrow, :inspector_auth,
       allowed_users: String.split(allowed_users, ",") |> Enum.map(&String.trim/1),
-      allowed_orgs: System.get_env("INSPECTOR_ALLOWED_ORGS", "") |> String.split(",") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+      allowed_orgs:
+        System.get_env("INSPECTOR_ALLOWED_ORGS", "")
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.reject(&(&1 == ""))
   end
 
   # Production server configuration
@@ -112,22 +118,5 @@ if config_env() == :prod do
 
   config :burrow, :server, server_config
 
-  config :burrow, :client,
-    server_host: System.get_env("BURROW_SERVER_HOST"),
-    server_port: String.to_integer(System.get_env("BURROW_SERVER_PORT") || "443")
-
-  # Distributed Erlang clustering via Fly.io internal DNS
-  if fly_app_name = System.get_env("FLY_APP_NAME") do
-    config :libcluster,
-      topologies: [
-        fly6pn: [
-          strategy: Cluster.Strategy.DNSPoll,
-          config: [
-            polling_interval: 5_000,
-            query: "#{fly_app_name}.internal",
-            node_basename: fly_app_name
-          ]
-        ]
-      ]
-  end
+  config :burrow, dns_cluster_query: System.get_env("DNS_CLUSTER_QUERY")
 end

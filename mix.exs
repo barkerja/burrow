@@ -48,7 +48,7 @@ defmodule Burrow.MixProject do
       {:ueberauth, "~> 0.10"},
       {:ueberauth_github, "~> 0.8"},
       # Distributed Erlang clustering
-      {:libcluster, "~> 3.4"}
+      {:dns_cluster, "~> 0.2.0"}
     ]
   end
 end

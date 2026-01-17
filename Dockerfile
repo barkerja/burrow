@@ -23,6 +23,7 @@ RUN mix deps.compile
 COPY lib lib
 COPY config config
 COPY priv priv
+COPY rel rel
 
 # Compile application
 RUN mix compile
