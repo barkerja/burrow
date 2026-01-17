@@ -130,6 +130,27 @@ defmodule Burrow.Server.TunnelRegistry do
   end
 
   @doc """
+  Returns all active tunnels on this node.
+  """
+  @spec list_tunnels() :: [tunnel_info()]
+  def list_tunnels do
+    GenServer.call(__MODULE__, :list_tunnels)
+  end
+
+  @doc """
+  Returns all active tunnel subdomains across the cluster.
+  """
+  @spec list_subdomains() :: [String.t()]
+  def list_subdomains do
+    :pg.which_groups(@pg_scope)
+    |> Enum.flat_map(fn
+      {:tunnel, subdomain} -> [subdomain]
+      _ -> []
+    end)
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns tunnel info for a tunnel owned by this process.
   Called remotely by other nodes during distributed lookup.
   """
@@ -214,6 +235,12 @@ defmodule Burrow.Server.TunnelRegistry do
   @impl true
   def handle_call(:count, _from, state) do
     {:reply, map_size(state.tunnels), state}
+  end
+
+  @impl true
+  def handle_call(:list_tunnels, _from, state) do
+    tunnels = Map.values(state.tunnels)
+    {:reply, tunnels, state}
   end
 
   @impl true
