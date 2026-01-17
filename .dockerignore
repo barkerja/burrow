@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+_build
+deps
+*.ez
+
+# Test artifacts
+cover
+.elixir_ls
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Example configs (not needed in build)
+*.example
+
+# Test files
+test
+
+# Local development
+.env
+.env.*
+burrow
+
+# OS files
+.DS_Store
+Thumbs.db

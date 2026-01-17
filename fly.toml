@@ -1,0 +1,165 @@
+# fly.toml app configuration file generated for burrow on 2025-12-12T23:44:50-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'burrow'
+primary_region = 'ewr'
+
+[build]
+
+[http_service]
+  internal_port = 443
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
+
+# TCP tunnel ports (40000-40019 = 20 concurrent TCP tunnels)
+# Using handlers = [] for raw TCP pass-through
+[[services]]
+  internal_port = 40000
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40000
+    handlers = []
+
+[[services]]
+  internal_port = 40001
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40001
+    handlers = []
+
+[[services]]
+  internal_port = 40002
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40002
+    handlers = []
+
+[[services]]
+  internal_port = 40003
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40003
+    handlers = []
+
+[[services]]
+  internal_port = 40004
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40004
+    handlers = []
+
+[[services]]
+  internal_port = 40005
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40005
+    handlers = []
+
+[[services]]
+  internal_port = 40006
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40006
+    handlers = []
+
+[[services]]
+  internal_port = 40007
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40007
+    handlers = []
+
+[[services]]
+  internal_port = 40008
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40008
+    handlers = []
+
+[[services]]
+  internal_port = 40009
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40009
+    handlers = []
+
+[[services]]
+  internal_port = 40010
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40010
+    handlers = []
+
+[[services]]
+  internal_port = 40011
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40011
+    handlers = []
+
+[[services]]
+  internal_port = 40012
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40012
+    handlers = []
+
+[[services]]
+  internal_port = 40013
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40013
+    handlers = []
+
+[[services]]
+  internal_port = 40014
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40014
+    handlers = []
+
+[[services]]
+  internal_port = 40015
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40015
+    handlers = []
+
+[[services]]
+  internal_port = 40016
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40016
+    handlers = []
+
+[[services]]
+  internal_port = 40017
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40017
+    handlers = []
+
+[[services]]
+  internal_port = 40018
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40018
+    handlers = []
+
+[[services]]
+  internal_port = 40019
+  protocol = "tcp"
+  [[services.ports]]
+    port = 40019
+    handlers = []

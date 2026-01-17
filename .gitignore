@@ -1,0 +1,27 @@
+# Elixir/Erlang
+/_build
+/cover
+/deps
+/doc
+/.fetch
+erl_crash.dump
+*.ez
+*.beam
+.env*
+/config/*.secret.exs
+.elixir_ls/
+.expert/
+
+# Rust
+**/target/
+**/*.rs.bk
+*.pdb
+
+# macOS
+.DS_Store
+
+# Keypair (sensitive)
+keypair.json
+
+docs/
+ROADMAP.md

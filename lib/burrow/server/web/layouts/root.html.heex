@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Burrow Request Inspector</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --surface: #1e293b;
+        --surface-hover: #334155;
+        --border: #334155;
+        --text: #f8fafc;
+        --text-muted: #94a3b8;
+        --accent: #3b82f6;
+        --success: #22c55e;
+        --warning: #f59e0b;
+        --error: #ef4444;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html, body {
+        height: 100%;
+      }
+
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        width: 100%;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      header h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      header h1 span {
+        color: var(--accent);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .badge-live {
+        background: rgba(34, 197, 94, 0.2);
+        color: var(--success);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        border-radius: 0.375rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: background 0.15s;
+      }
+
+      .btn:hover {
+        background: var(--surface-hover);
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+
+      th, td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+      }
+
+      th {
+        color: var(--text-muted);
+        font-weight: 500;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+      }
+
+      tr:hover td {
+        background: var(--surface);
+      }
+
+      .method {
+        font-weight: 600;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+      }
+
+      .method-get { color: var(--success); }
+      .method-post { color: var(--accent); }
+      .method-put { color: var(--warning); }
+      .method-delete { color: var(--error); }
+
+      .status {
+        font-weight: 500;
+      }
+
+      .status-2xx { color: var(--success); }
+      .status-3xx { color: var(--accent); }
+      .status-4xx { color: var(--warning); }
+      .status-5xx { color: var(--error); }
+      .status-pending { color: var(--text-muted); }
+
+      .filters {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .filters input, .filters select {
+        padding: 0.5rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 0.375rem;
+        font-size: 0.875rem;
+      }
+
+      .filters input::placeholder {
+        color: var(--text-muted);
+      }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        overflow: hidden;
+      }
+
+      .table-scroll {
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+      }
+
+      .panel-header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .panel-body {
+        padding: 1rem;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .detail-grid > div {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        gap: 1rem;
+      }
+
+      .detail-grid .panel {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .detail-grid .panel-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .detail-grid .code-block {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .detail-section {
+        margin-bottom: 1rem;
+      }
+
+      .detail-section h3 {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+      }
+
+      .code-block {
+        background: var(--bg);
+        padding: 1rem;
+        border-radius: 0.375rem;
+        overflow-x: auto;
+        font-size: 0.8rem;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: var(--text-muted);
+      }
+
+      .empty-state p {
+        margin-bottom: 0.5rem;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+    </style>
+    <script defer src="https://cdn.jsdelivr.net/npm/phoenix@1.7.21/priv/static/phoenix.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/phoenix_live_view@1.1.19/priv/static/phoenix_live_view.min.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        let csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content");
+        let liveSocket = new window.LiveView.LiveSocket("/live", window.Phoenix.Socket, {
+          params: { _csrf_token: csrfToken }
+        });
+        liveSocket.connect();
+        window.liveSocket = liveSocket;
+      });
+    </script>
+    <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
+  </head>
+  <body>
+    <header>
+      <h1>
+        <span>Burrow</span> Request Inspector
+      </h1>
+      <span class="badge badge-live">LIVE</span>
+    </header>
+    <div class="container">
+      <%= @inner_content %>
+    </div>
+  </body>
+</html>

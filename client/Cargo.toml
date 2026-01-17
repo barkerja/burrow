@@ -1,0 +1,76 @@
+[package]
+name = "burrow-client"
+version = "0.1.0"
+edition = "2021"
+authors = ["Burrow Contributors"]
+description = "CLI client for Burrow tunnel service"
+license = "MIT"
+repository = "https://github.com/example/burrow"
+readme = "README.md"
+keywords = ["tunnel", "ngrok", "networking", "cli"]
+categories = ["command-line-utilities", "network-programming"]
+
+[[bin]]
+name = "burrow"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# WebSocket client
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
+http = "1"
+
+# HTTP client for local forwarding
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# JSON serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Cryptography (Ed25519)
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+
+# Base64 encoding
+base64 = "0.22"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+chrono = "0.4"
+
+# Config file paths
+directories = "5"
+
+# URL parsing
+url = "2"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
+codegen-units = 1
+panic = "abort"
+
+[profile.release-fast]
+inherits = "release"
+opt-level = 3
+lto = "thin"
+strip = false
