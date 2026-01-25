@@ -24,7 +24,7 @@ defmodule Burrow.Server.TunnelSocket do
 
   require Logger
 
-  alias Burrow.Protocol.{Codec, Message}
+  alias Burrow.Protocol.{Codec, Fields, Message}
   alias Burrow.Accounts
 
   alias Burrow.Server.{
@@ -212,7 +212,7 @@ defmodule Burrow.Server.TunnelSocket do
     # Client forwarding a frame from local WebSocket to browser
     ws_id = message.ws_id
     opcode = parse_opcode(message.opcode)
-    data = decode_frame_data(message.data, Map.get(message, :data_encoding))
+    data = Fields.decode_body(message.data, Map.get(message, :data_encoding))
 
     # Use forward_frame which buffers if WSProxy not yet registered
     WSRegistry.forward_frame(ws_id, opcode, data)
@@ -269,7 +269,7 @@ defmodule Burrow.Server.TunnelSocket do
 
   defp handle_message(:tcp_connected, message, state) do
     # Client successfully connected to local service
-    tcp_id = get_field(message, :tcp_id)
+    tcp_id = Fields.get(message, :tcp_id)
 
     case TCPRegistry.lookup_connection(tcp_id) do
       {:ok, proxy_pid} ->
@@ -284,8 +284,8 @@ defmodule Burrow.Server.TunnelSocket do
 
   defp handle_message(:tcp_data, message, state) do
     # Client forwarding data from local service
-    tcp_id = get_field(message, :tcp_id)
-    data = decode_tcp_data(get_field(message, :data), get_field(message, :data_encoding))
+    tcp_id = Fields.get(message, :tcp_id)
+    data = Fields.decode_body(Fields.get(message, :data), Fields.get(message, :data_encoding))
 
     case TCPRegistry.lookup_connection(tcp_id) do
       {:ok, proxy_pid} ->
@@ -300,8 +300,8 @@ defmodule Burrow.Server.TunnelSocket do
 
   defp handle_message(:tcp_close, message, state) do
     # Client closing TCP connection
-    tcp_id = get_field(message, :tcp_id)
-    reason = get_field(message, :reason) || "closed"
+    tcp_id = Fields.get(message, :tcp_id)
+    reason = Fields.get(message, :reason) || "closed"
 
     case TCPRegistry.lookup_connection(tcp_id) do
       {:ok, proxy_pid} ->
@@ -330,33 +330,10 @@ defmodule Burrow.Server.TunnelSocket do
   defp parse_opcode("close"), do: :close
   defp parse_opcode(_), do: :text
 
-  # Helper to get field from message with either atom or string key
-  defp get_field(map, key) when is_atom(key) do
-    Map.get(map, key) || Map.get(map, Atom.to_string(key))
-  end
-
-  defp decode_frame_data(data, "base64") when is_binary(data) do
-    case Base.decode64(data) do
-      {:ok, decoded} -> decoded
-      :error -> data
-    end
-  end
-
-  defp decode_frame_data(data, _), do: data
-
-  defp decode_tcp_data(data, "base64") when is_binary(data) do
-    case Base.decode64(data) do
-      {:ok, decoded} -> decoded
-      :error -> data
-    end
-  end
-
-  defp decode_tcp_data(data, _), do: data
-
   # Registration Processing
 
   defp process_registration(message, state) do
-    token = get_field(message, :token)
+    token = Fields.get(message, :token)
 
     with {:ok, api_token} <- verify_token(token),
          {:ok, subdomain} <- assign_subdomain(api_token.user_id, message),
@@ -365,8 +342,8 @@ defmodule Burrow.Server.TunnelSocket do
         tunnel_id: tunnel_id,
         subdomain: subdomain,
         full_url: build_url(subdomain),
-        local_host: get_field(message, :local_host) || "localhost",
-        local_port: get_field(message, :local_port) || 80
+        local_host: Fields.get(message, :local_host) || "localhost",
+        local_port: Fields.get(message, :local_port) || 80
       }
 
       new_state = %{
@@ -392,7 +369,7 @@ defmodule Burrow.Server.TunnelSocket do
   end
 
   defp assign_subdomain(user_id, message) do
-    requested = get_field(message, :requested_subdomain)
+    requested = Fields.get(message, :requested_subdomain)
 
     cond do
       # No subdomain requested - generate default from user_id
@@ -437,8 +414,8 @@ defmodule Burrow.Server.TunnelSocket do
       user_id: user_id,
       connection_pid: self(),
       stream_ref: stream_ref,
-      local_host: get_field(message, :local_host) || "localhost",
-      local_port: get_field(message, :local_port) || 80
+      local_host: Fields.get(message, :local_host) || "localhost",
+      local_port: Fields.get(message, :local_port) || 80
     }
 
     case TunnelRegistry.register(params) do

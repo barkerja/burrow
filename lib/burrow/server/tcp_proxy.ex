@@ -68,11 +68,11 @@ defmodule Burrow.Server.TCPProxy do
     local_port = Keyword.fetch!(opts, :local_port)
     client_socket = Keyword.fetch!(opts, :client_socket)
 
+    # Monitor the tunnel connection first to avoid race condition
+    Process.monitor(connection_pid)
+
     # Register in registry
     TCPRegistry.register_connection(tcp_id, self())
-
-    # Monitor the tunnel connection
-    Process.monitor(connection_pid)
 
     state = %__MODULE__{
       tcp_id: tcp_id,
@@ -99,23 +99,21 @@ defmodule Burrow.Server.TCPProxy do
     {:noreply, %{state | status: :connected}}
   end
 
-  def handle_cast({:forward_data, data}, state) do
-    if state.status == :connected do
-      case :gen_tcp.send(state.client_socket, data) do
-        :ok ->
-          {:noreply, state}
+  def handle_cast({:forward_data, data}, %{status: :connected} = state) do
+    case :gen_tcp.send(state.client_socket, data) do
+      :ok ->
+        {:noreply, state}
 
-        {:error, reason} ->
-          Logger.debug("[TCPProxy #{state.tcp_id}] Failed to send to client: #{inspect(reason)}")
-          send_close(state, inspect(reason))
-          {:stop, :normal, state}
-      end
-    else
-      # Buffer data if not yet connected?
-      # For simplicity, drop it
-      Logger.warning("[TCPProxy #{state.tcp_id}] Received data before connected, dropping")
-      {:noreply, state}
+      {:error, reason} ->
+        Logger.debug("[TCPProxy #{state.tcp_id}] Failed to send to client: #{inspect(reason)}")
+        send_close(state, inspect(reason))
+        {:stop, :normal, state}
     end
+  end
+
+  def handle_cast({:forward_data, _data}, state) do
+    Logger.warning("[TCPProxy #{state.tcp_id}] Received data before connected, dropping")
+    {:noreply, state}
   end
 
   def handle_cast({:close, reason}, state) do

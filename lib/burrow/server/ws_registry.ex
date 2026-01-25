@@ -153,20 +153,22 @@ defmodule Burrow.Server.WSRegistry do
     now = System.monotonic_time(:millisecond)
     cutoff = now - @buffer_ttl_ms
 
-    # Find and delete all buffered frames older than TTL
-    orphaned_count =
+    # Phase 1: Collect ws_ids with expired frames
+    orphaned_ws_ids =
       :ets.foldl(
         fn {ws_id, _opcode, _data, timestamp}, acc ->
-          if timestamp < cutoff do
-            :ets.match_delete(@buffer_table, {ws_id, :_, :_, :_})
-            acc + 1
-          else
-            acc
-          end
+          if timestamp < cutoff, do: MapSet.put(acc, ws_id), else: acc
         end,
-        0,
+        MapSet.new(),
         @buffer_table
       )
+
+    # Phase 2: Delete all frames for collected ws_ids
+    Enum.each(orphaned_ws_ids, fn ws_id ->
+      :ets.match_delete(@buffer_table, {ws_id, :_, :_, :_})
+    end)
+
+    orphaned_count = MapSet.size(orphaned_ws_ids)
 
     if orphaned_count > 0 do
       Logger.warning("[WSRegistry] Cleaned up #{orphaned_count} orphaned buffered frames")

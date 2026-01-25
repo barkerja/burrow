@@ -28,4 +28,9 @@ defmodule Burrow.ClusterMonitor do
     Logger.warning("[Cluster] Disconnected from #{node}")
     {:noreply, state}
   end
+
+  @impl true
+  def handle_info(_msg, state) do
+    {:noreply, state}
+  end
 end

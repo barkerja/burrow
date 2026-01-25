@@ -24,7 +24,7 @@ defmodule Burrow.Server.PendingRequests do
 
   @type state :: %{
           requests: %{String.t() => pending_request()},
-          by_tunnel: %{String.t() => [String.t()]},
+          by_tunnel: %{String.t() => MapSet.t(String.t())},
           timeout_ms: pos_integer()
         }
 
@@ -118,7 +118,14 @@ defmodule Burrow.Server.PendingRequests do
     }
 
     requests = Map.put(state.requests, request_id, pending)
-    by_tunnel = Map.update(state.by_tunnel, tunnel_id, [request_id], &[request_id | &1])
+
+    by_tunnel =
+      Map.update(
+        state.by_tunnel,
+        tunnel_id,
+        MapSet.new([request_id]),
+        &MapSet.put(&1, request_id)
+      )
 
     {:reply, :ok, %{state | requests: requests, by_tunnel: by_tunnel}}
   end
@@ -137,8 +144,8 @@ defmodule Burrow.Server.PendingRequests do
           Map.update(
             state.by_tunnel,
             pending.tunnel_id,
-            [],
-            &List.delete(&1, request_id)
+            MapSet.new(),
+            &MapSet.delete(&1, request_id)
           )
 
         {:reply, :ok, %{state | requests: requests, by_tunnel: by_tunnel}}
@@ -157,7 +164,7 @@ defmodule Burrow.Server.PendingRequests do
 
   @impl true
   def handle_cast({:cancel_for_tunnel, tunnel_id}, state) do
-    request_ids = Map.get(state.by_tunnel, tunnel_id, [])
+    request_ids = Map.get(state.by_tunnel, tunnel_id, MapSet.new())
     state = Enum.reduce(request_ids, state, &remove_request(&2, &1))
     {:noreply, state}
   end
@@ -210,8 +217,8 @@ defmodule Burrow.Server.PendingRequests do
           Map.update(
             state.by_tunnel,
             pending.tunnel_id,
-            [],
-            &List.delete(&1, request_id)
+            MapSet.new(),
+            &MapSet.delete(&1, request_id)
           )
 
         %{state | requests: requests, by_tunnel: by_tunnel}
@@ -220,7 +227,7 @@ defmodule Burrow.Server.PendingRequests do
 
   defp remove_request_ids_from_tunnel_index(by_tunnel, requests_to_remove) do
     Enum.reduce(requests_to_remove, by_tunnel, fn {request_id, pending}, acc ->
-      Map.update(acc, pending.tunnel_id, [], &List.delete(&1, request_id))
+      Map.update(acc, pending.tunnel_id, MapSet.new(), &MapSet.delete(&1, request_id))
     end)
   end
 end
