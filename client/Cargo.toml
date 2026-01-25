@@ -19,8 +19,8 @@ path = "src/main.rs"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 
-# WebSocket client
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+# WebSocket client (rustls for cross-compilation support)
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
 http = "1"
 
