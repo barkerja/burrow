@@ -1,5 +1,7 @@
 use chrono::{DateTime, Local};
 
+use crate::protocol::RequestId;
+
 /// Events that flow from the connection to the TUI
 #[derive(Debug, Clone)]
 pub enum TuiEvent {
@@ -13,8 +15,18 @@ pub enum TuiEvent {
     ResponseSent(ResponseEvent),
     /// Connection status changed
     ConnectionStatus(ConnectionStatus),
-    /// Shutdown signal
-    Shutdown,
+}
+
+/// Commands that flow from the TUI to the connection
+#[derive(Debug, Clone)]
+pub enum TuiCommand {
+    /// Register a new HTTP tunnel
+    AddHttpTunnel {
+        local_port: u16,
+        subdomain: Option<String>,
+    },
+    /// Register a new TCP tunnel
+    AddTcpTunnel { local_port: u16 },
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +43,7 @@ pub struct TcpTunnelEvent {
 
 #[derive(Debug, Clone)]
 pub struct RequestEvent {
-    pub request_id: String,
+    pub request_id: RequestId,
     pub method: String,
     pub path: String,
     pub query_string: String,
@@ -43,19 +55,25 @@ pub struct RequestEvent {
 
 #[derive(Debug, Clone)]
 pub struct ResponseEvent {
-    pub request_id: String,
+    pub request_id: RequestId,
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Option<Vec<u8>>,
     pub duration_ms: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionStatus {
     Connecting,
     Connected,
-    Reconnecting,
-    Disconnected,
+    Reconnecting {
+        attempt: u32,
+        reason: String,
+        next_retry_secs: u64,
+    },
+    Disconnected {
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for ConnectionStatus {
@@ -63,8 +81,10 @@ impl std::fmt::Display for ConnectionStatus {
         match self {
             ConnectionStatus::Connecting => write!(f, "Connecting"),
             ConnectionStatus::Connected => write!(f, "Connected"),
-            ConnectionStatus::Reconnecting => write!(f, "Reconnecting"),
-            ConnectionStatus::Disconnected => write!(f, "Disconnected"),
+            ConnectionStatus::Reconnecting { attempt, .. } => {
+                write!(f, "Reconnecting ({})", attempt)
+            }
+            ConnectionStatus::Disconnected { .. } => write!(f, "Disconnected"),
         }
     }
 }
