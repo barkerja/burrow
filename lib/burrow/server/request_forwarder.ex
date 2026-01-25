@@ -17,7 +17,15 @@ defmodule Burrow.Server.RequestForwarder do
 
   require Logger
 
-  alias Burrow.Server.{TunnelRegistry, PendingRequests, WSRegistry, WSProxy, RequestStore, ErrorPage}
+  alias Burrow.Server.{
+    TunnelRegistry,
+    PendingRequests,
+    WSRegistry,
+    WSProxy,
+    RequestStore,
+    ErrorPage
+  }
+
   alias Burrow.Protocol.{Codec, Message}
   alias Burrow.ULID
 
@@ -39,8 +47,29 @@ defmodule Burrow.Server.RequestForwarder do
         forward_through_tunnel(conn, subdomain, tunnel_info)
 
       {:error, :not_found} ->
+        log_unknown_request(conn, subdomain)
         ErrorPage.render(conn, 404, subdomain: subdomain)
     end
+  end
+
+  defp log_unknown_request(conn, subdomain) do
+    headers = conn.req_headers
+    user_agent = get_header(headers, "user-agent")
+    referer = get_header(headers, "referer")
+    client_ip = get_client_ip(headers, conn.remote_ip)
+
+    RequestStore.log_unknown_request(%{
+      id: ULID.generate(),
+      subdomain: subdomain,
+      method: conn.method,
+      path: conn.request_path,
+      query_string: conn.query_string,
+      headers: headers,
+      client_ip: client_ip,
+      user_agent: user_agent,
+      referer: referer,
+      requested_at: DateTime.utc_now()
+    })
   end
 
   # Private functions
@@ -76,7 +105,6 @@ defmodule Burrow.Server.RequestForwarder do
   end
 
   defp forward_http_request_with_body(conn, subdomain, tunnel_info, request_id, start_time, body) do
-
     # Extract useful header values for display
     headers = conn.req_headers
     user_agent = get_header(headers, "user-agent")
@@ -212,7 +240,11 @@ defmodule Burrow.Server.RequestForwarder do
         conn
         |> WebSockAdapter.upgrade(
           WSProxy,
-          [ws_id: ws_id, tunnel_pid: tunnel_info.connection_pid, tunnel_id: tunnel_info.tunnel_id],
+          [
+            ws_id: ws_id,
+            tunnel_pid: tunnel_info.connection_pid,
+            tunnel_id: tunnel_info.tunnel_id
+          ],
           timeout: :infinity
         )
         |> halt()
@@ -263,10 +295,14 @@ defmodule Burrow.Server.RequestForwarder do
       conn =
         Enum.reduce(headers, conn, fn
           [key, value], acc ->
-            if String.downcase(key) in skip_headers, do: acc, else: put_resp_header(acc, key, value)
+            if String.downcase(key) in skip_headers,
+              do: acc,
+              else: put_resp_header(acc, key, value)
 
           {key, value}, acc ->
-            if String.downcase(key) in skip_headers, do: acc, else: put_resp_header(acc, key, value)
+            if String.downcase(key) in skip_headers,
+              do: acc,
+              else: put_resp_header(acc, key, value)
 
           _, acc ->
             acc

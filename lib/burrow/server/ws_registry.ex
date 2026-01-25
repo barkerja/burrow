@@ -81,7 +81,8 @@ defmodule Burrow.Server.WSRegistry do
   @doc """
   Completes a pending WebSocket upgrade with success or error.
   """
-  @spec complete_pending(String.t(), {:ok, list()} | {:error, term()}) :: :ok | {:error, :not_found}
+  @spec complete_pending(String.t(), {:ok, list()} | {:error, term()}) ::
+          :ok | {:error, :not_found}
   def complete_pending(ws_id, result) do
     GenServer.call(__MODULE__, {:complete_pending, ws_id, result})
   end

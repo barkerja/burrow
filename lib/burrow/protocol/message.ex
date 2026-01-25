@@ -41,18 +41,22 @@ defmodule Burrow.Protocol.Message do
 
   ## Examples
 
-      iex> att = %{public_key: "pk", timestamp: 123, signature: "sig"}
-      iex> msg = Burrow.Protocol.Message.register_tunnel(att, "localhost", 3000)
+      iex> msg = Burrow.Protocol.Message.register_tunnel("brw_abc123", "localhost", 3000)
       iex> msg.type
       "register_tunnel"
+
+      iex> msg = Burrow.Protocol.Message.register_tunnel("brw_abc123", "localhost", 3000, "myapp")
+      iex> msg.requested_subdomain
+      "myapp"
   """
-  @spec register_tunnel(map(), String.t(), pos_integer()) :: map()
-  def register_tunnel(attestation_map, local_host, local_port) do
+  @spec register_tunnel(String.t(), String.t(), pos_integer(), String.t() | nil) :: map()
+  def register_tunnel(token, local_host, local_port, requested_subdomain \\ nil) do
     %{
       type: "register_tunnel",
-      attestation: attestation_map,
+      token: token,
       local_host: local_host,
-      local_port: local_port
+      local_port: local_port,
+      requested_subdomain: requested_subdomain
     }
   end
 
@@ -127,8 +131,10 @@ defmodule Burrow.Protocol.Message do
 
   defp encode_headers(headers) when is_list(headers) do
     Enum.map(headers, fn
-      {k, v} -> [k, v]  # Convert tuples to lists for JSON
-      [k, v] -> [k, v]  # Already a list
+      # Convert tuples to lists for JSON
+      {k, v} -> [k, v]
+      # Already a list
+      [k, v] -> [k, v]
       other -> other
     end)
   end

@@ -25,23 +25,36 @@ defmodule Burrow.Server.TunnelSocket do
   require Logger
 
   alias Burrow.Protocol.{Codec, Message}
-  alias Burrow.Crypto.Attestation
-  alias Burrow.Server.{TunnelRegistry, PendingRequests, Subdomain, WSRegistry, TCPRegistry, TCPListener, TCPProxy}
+  alias Burrow.Accounts
+
+  alias Burrow.Server.{
+    TunnelRegistry,
+    PendingRequests,
+    Subdomain,
+    WSRegistry,
+    TCPRegistry,
+    TCPListener,
+    TCPProxy
+  }
+
   alias Burrow.ULID
 
   # Send heartbeat every 30 seconds to keep connection alive
   @heartbeat_interval_ms 30_000
+  # Close connection if no pong received within 3 heartbeat intervals
+  @pong_timeout_ms @heartbeat_interval_ms * 3
 
   defstruct status: :awaiting_registration,
             tunnels: %{},
             tcp_tunnels: %{},
-            client_public_key: nil
+            user_id: nil,
+            last_pong_at: nil
 
   @impl WebSock
   def init(_opts) do
     # Schedule first heartbeat
     Process.send_after(self(), :send_heartbeat, @heartbeat_interval_ms)
-    {:ok, %__MODULE__{}}
+    {:ok, %__MODULE__{last_pong_at: System.monotonic_time(:millisecond)}}
   end
 
   @impl WebSock
@@ -64,15 +77,39 @@ defmodule Burrow.Server.TunnelSocket do
   end
 
   @impl WebSock
+  def handle_control({_data, opcode: :pong}, state) do
+    # Client responded to our ping - update last pong timestamp
+    {:ok, %{state | last_pong_at: System.monotonic_time(:millisecond)}}
+  end
+
+  def handle_control({_data, opcode: :ping}, state) do
+    # Client sent us a ping - Bandit auto-responds with pong
+    # Also treat this as activity for liveness tracking
+    {:ok, %{state | last_pong_at: System.monotonic_time(:millisecond)}}
+  end
+
+  @impl WebSock
   def handle_info({:forward_request, json}, state) do
     {:push, {:text, json}, state}
   end
 
   def handle_info(:send_heartbeat, state) do
-    # Schedule next heartbeat
-    Process.send_after(self(), :send_heartbeat, @heartbeat_interval_ms)
-    # Send ping frame to keep connection alive
-    {:push, {:ping, ""}, state}
+    now = System.monotonic_time(:millisecond)
+    time_since_pong = now - state.last_pong_at
+
+    if time_since_pong > @pong_timeout_ms do
+      # Client hasn't responded to pings - connection is stale
+      Logger.warning(
+        "[TunnelSocket] Connection stale - no pong for #{time_since_pong}ms, closing"
+      )
+
+      {:stop, :normal, state}
+    else
+      # Schedule next heartbeat
+      Process.send_after(self(), :send_heartbeat, @heartbeat_interval_ms)
+      # Send ping frame to keep connection alive
+      {:push, {:ping, ""}, state}
+    end
   end
 
   def handle_info(_message, state) do
@@ -91,6 +128,7 @@ defmodule Burrow.Server.TunnelSocket do
       if Process.alive?(tcp_tunnel.listener_pid) do
         GenServer.stop(tcp_tunnel.listener_pid, :normal)
       end
+
       TCPRegistry.unregister_tunnel(tcp_tunnel_id)
     end
 
@@ -111,16 +149,25 @@ defmodule Burrow.Server.TunnelSocket do
 
         {:reply, :ok, {:text, Codec.encode!(response)}, new_state}
 
-      {:error, :expired} ->
-        error = Message.error("attestation_expired", "Attestation has expired")
+      {:error, :invalid_token} ->
+        error = Message.error("invalid_token", "Invalid or missing API token")
         {:reply, :ok, {:text, Codec.encode!(error)}, state}
 
-      {:error, :invalid_signature} ->
-        error = Message.error("invalid_signature", "Attestation signature is invalid")
+      {:error, :expired_token} ->
+        error = Message.error("expired_token", "API token has expired")
         {:reply, :ok, {:text, Codec.encode!(error)}, state}
 
       {:error, :subdomain_taken} ->
-        error = Message.error("subdomain_taken", "Requested subdomain is already in use")
+        error =
+          Message.error(
+            "subdomain_taken",
+            "Requested subdomain is already in use by another user"
+          )
+
+        {:reply, :ok, {:text, Codec.encode!(error)}, state}
+
+      {:error, :subdomain_reserved} ->
+        error = Message.error("subdomain_reserved", "This subdomain is reserved by another user")
         {:reply, :ok, {:text, Codec.encode!(error)}, state}
 
       {:error, reason} ->
@@ -146,6 +193,8 @@ defmodule Burrow.Server.TunnelSocket do
   end
 
   defp handle_message(:heartbeat, _message, state) do
+    # Client heartbeat also counts as activity
+    state = %{state | last_pong_at: System.monotonic_time(:millisecond)}
     response = Message.heartbeat()
     {:reply, :ok, {:text, Codec.encode!(response)}, state}
   end
@@ -207,11 +256,12 @@ defmodule Burrow.Server.TunnelSocket do
 
     server_port = TCPListener.get_port(listener_pid)
 
-    tcp_tunnels = Map.put(state.tcp_tunnels, tcp_tunnel_id, %{
-      listener_pid: listener_pid,
-      local_port: local_port,
-      server_port: server_port
-    })
+    tcp_tunnels =
+      Map.put(state.tcp_tunnels, tcp_tunnel_id, %{
+        listener_pid: listener_pid,
+        local_port: local_port,
+        server_port: server_port
+      })
 
     response = Message.tcp_tunnel_registered(tcp_tunnel_id, server_port, local_port)
     {:reply, :ok, {:text, Codec.encode!(response)}, %{state | tcp_tunnels: tcp_tunnels}}
@@ -306,22 +356,23 @@ defmodule Burrow.Server.TunnelSocket do
   # Registration Processing
 
   defp process_registration(message, state) do
-    with {:ok, attestation} <- parse_attestation(message.attestation),
-         :ok <- Attestation.verify(attestation),
-         {:ok, subdomain} <- assign_subdomain(attestation, message),
-         {:ok, tunnel_id} <- register_tunnel(subdomain, attestation, message) do
+    token = get_field(message, :token)
+
+    with {:ok, api_token} <- verify_token(token),
+         {:ok, subdomain} <- assign_subdomain(api_token.user_id, message),
+         {:ok, tunnel_id} <- register_tunnel(subdomain, api_token.user_id, message) do
       tunnel_info = %{
         tunnel_id: tunnel_id,
         subdomain: subdomain,
         full_url: build_url(subdomain),
-        local_host: message.local_host,
-        local_port: message.local_port
+        local_host: get_field(message, :local_host) || "localhost",
+        local_port: get_field(message, :local_port) || 80
       }
 
       new_state = %{
         state
         | status: :connected,
-          client_public_key: attestation.public_key,
+          user_id: api_token.user_id,
           tunnels: Map.put(state.tunnels, subdomain, tunnel_info)
       }
 
@@ -329,49 +380,65 @@ defmodule Burrow.Server.TunnelSocket do
     end
   end
 
-  defp parse_attestation(att_map) when is_map(att_map) do
-    Attestation.from_map(att_map)
+  defp verify_token(nil), do: {:error, :invalid_token}
+  defp verify_token(""), do: {:error, :invalid_token}
+
+  defp verify_token(token) when is_binary(token) do
+    case Accounts.verify_api_token(token) do
+      {:ok, api_token} -> {:ok, api_token}
+      {:error, :invalid_token} -> {:error, :invalid_token}
+      {:error, :expired_token} -> {:error, :expired_token}
+    end
   end
 
-  defp parse_attestation(_), do: {:error, :missing_attestation}
-
-  defp assign_subdomain(attestation, message) do
-    requested = Map.get(message, :requested_subdomain) || attestation.requested_subdomain
+  defp assign_subdomain(user_id, message) do
+    requested = get_field(message, :requested_subdomain)
 
     cond do
+      # No subdomain requested - generate default from user_id
       is_nil(requested) or requested == "" ->
-        {:ok, Subdomain.from_public_key(attestation.public_key)}
+        default = Accounts.generate_default_subdomain(user_id)
+        ensure_subdomain_access(default, user_id)
 
+      # Invalid subdomain format - use default
       not Subdomain.valid?(requested) ->
-        {:ok, Subdomain.from_public_key(attestation.public_key)}
+        default = Accounts.generate_default_subdomain(user_id)
+        ensure_subdomain_access(default, user_id)
 
-      subdomain_available?(requested) ->
-        {:ok, requested}
-
+      # Valid subdomain requested - check access
       true ->
-        {:error, :subdomain_taken}
+        ensure_subdomain_access(requested, user_id)
     end
   end
 
-  defp subdomain_available?(subdomain) do
+  defp ensure_subdomain_access(subdomain, user_id) do
+    # First check if another tunnel is already using this subdomain
     case TunnelRegistry.lookup(subdomain) do
-      {:error, :not_found} -> true
-      {:ok, _} -> false
+      {:ok, _} ->
+        {:error, :subdomain_taken}
+
+      {:error, :not_found} ->
+        # Check reservation ownership and auto-reserve if available
+        case Accounts.ensure_subdomain_access(subdomain, user_id) do
+          {:ok, _reservation} -> {:ok, subdomain}
+          {:error, :reserved_by_other} -> {:error, :subdomain_reserved}
+          {:error, changeset} -> {:error, {:reservation_failed, changeset}}
+        end
     end
   end
 
-  defp register_tunnel(subdomain, attestation, message) do
+  defp register_tunnel(subdomain, user_id, message) do
     tunnel_id = ULID.generate()
     stream_ref = make_ref()
 
     params = %{
       tunnel_id: tunnel_id,
       subdomain: subdomain,
-      client_public_key: attestation.public_key,
+      user_id: user_id,
       connection_pid: self(),
       stream_ref: stream_ref,
-      local_host: Map.get(message, :local_host, "localhost"),
-      local_port: Map.get(message, :local_port, 80)
+      local_host: get_field(message, :local_host) || "localhost",
+      local_port: get_field(message, :local_port) || 80
     }
 
     case TunnelRegistry.register(params) do
