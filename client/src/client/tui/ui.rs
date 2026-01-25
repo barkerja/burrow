@@ -6,16 +6,357 @@ use ratatui::{
     Frame,
 };
 
-use super::{App, ViewMode};
+use super::{AddTunnelField, App, ConnectionStatus, TunnelType, ViewMode};
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     match app.view_mode {
-        ViewMode::List => draw_list_view(frame, app),
-        ViewMode::Detail => draw_detail_view(frame, app),
+        ViewMode::TunnelList => draw_tunnel_list_view(frame, app),
+        ViewMode::AddTunnel => draw_add_tunnel_view(frame, app),
+        ViewMode::RequestList => draw_request_list_view(frame, app),
+        ViewMode::RequestDetail => draw_detail_view(frame, app),
     }
 }
 
-fn draw_list_view(frame: &mut Frame, app: &mut App) {
+fn draw_tunnel_list_view(frame: &mut Frame, app: &mut App) {
+    let show_banner = !matches!(
+        app.connection_status,
+        ConnectionStatus::Connected | ConnectionStatus::Connecting
+    );
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(if show_banner {
+            vec![
+                Constraint::Length(3), // Status bar
+                Constraint::Length(3), // Connection banner
+                Constraint::Min(5),    // Tunnel list
+                Constraint::Length(2), // Help footer
+            ]
+        } else {
+            vec![
+                Constraint::Length(3), // Status bar
+                Constraint::Min(5),    // Tunnel list
+                Constraint::Length(2), // Help footer
+            ]
+        })
+        .split(frame.area());
+
+    draw_status_bar(frame, app, chunks[0]);
+
+    let (tunnel_area, help_area) = if show_banner {
+        draw_connection_banner(frame, app, chunks[1]);
+        (chunks[2], chunks[3])
+    } else {
+        (chunks[1], chunks[2])
+    };
+
+    draw_tunnel_list(frame, app, tunnel_area);
+    draw_tunnel_list_help(frame, app, help_area);
+}
+
+fn draw_connection_banner(frame: &mut Frame, app: &App, area: Rect) {
+    let (message, style) = match &app.connection_status {
+        ConnectionStatus::Reconnecting {
+            attempt,
+            reason,
+            next_retry_secs,
+        } => {
+            let msg = if *next_retry_secs > 0 {
+                format!(
+                    " Reconnecting (attempt {})... {} - retrying in {}s ",
+                    attempt, reason, next_retry_secs
+                )
+            } else {
+                format!(" Reconnecting (attempt {})... {} ", attempt, reason)
+            };
+            (msg, Style::default().fg(Color::Yellow))
+        }
+        ConnectionStatus::Disconnected { reason } => {
+            let msg = format!(" Disconnected: {} ", reason);
+            (msg, Style::default().fg(Color::Red))
+        }
+        _ => return,
+    };
+
+    let banner = Paragraph::new(Line::from(vec![
+        Span::styled("⚠ ", style.bold()),
+        Span::styled(message, style),
+    ]))
+    .block(Block::default().borders(Borders::ALL).border_style(style));
+
+    frame.render_widget(banner, area);
+}
+
+fn draw_tunnel_list(frame: &mut Frame, app: &mut App, area: Rect) {
+    let total_tunnels = app.tunnels.len() + app.tcp_tunnels.len();
+    let is_active = app.is_connected();
+
+    if total_tunnels == 0 {
+        let empty_text = if app.is_disconnected() || app.is_reconnecting() {
+            vec![
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "  Waiting for connection... ",
+                    Style::default().fg(Color::DarkGray),
+                )]),
+            ]
+        } else {
+            vec![
+                Line::from(""),
+                Line::from(vec![Span::styled(
+                    "  No tunnels configured. ",
+                    Style::default().fg(Color::Gray),
+                )]),
+                Line::from(""),
+                Line::from(vec![
+                    Span::raw("  Press "),
+                    Span::styled("a", Style::default().fg(Color::Yellow).bold()),
+                    Span::raw(" to add a new tunnel."),
+                ]),
+            ]
+        };
+
+        let empty = Paragraph::new(empty_text)
+            .block(Block::default().borders(Borders::ALL).title(" Tunnels "));
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    let header_cells = ["TYPE", "LOCAL", "REMOTE"]
+        .iter()
+        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow).bold()));
+    let header = Row::new(header_cells).height(1).bottom_margin(1);
+
+    // Combine HTTP and TCP tunnels into rows, gray out if not connected
+    let mut rows = Vec::new();
+
+    for tunnel in &app.tunnels {
+        let (type_style, url_style) = if is_active {
+            (
+                Style::default().fg(Color::Green),
+                Style::default().fg(Color::Cyan),
+            )
+        } else {
+            (
+                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Color::DarkGray),
+            )
+        };
+
+        rows.push(Row::new(vec![
+            Cell::from("HTTP").style(type_style),
+            Cell::from(format!(":{}", tunnel.local_port))
+                .style(Style::default().fg(Color::DarkGray)),
+            Cell::from(tunnel.full_url.clone()).style(url_style),
+        ]));
+    }
+
+    for tcp in &app.tcp_tunnels {
+        let (type_style, url_style) = if is_active {
+            (
+                Style::default().fg(Color::Magenta),
+                Style::default().fg(Color::Cyan),
+            )
+        } else {
+            (
+                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Color::DarkGray),
+            )
+        };
+
+        rows.push(Row::new(vec![
+            Cell::from("TCP").style(type_style),
+            Cell::from(format!(":{}", tcp.local_port)).style(Style::default().fg(Color::DarkGray)),
+            Cell::from(format!("server:{}", tcp.server_port)).style(url_style),
+        ]));
+    }
+
+    let widths = [
+        Constraint::Length(8),
+        Constraint::Length(10),
+        Constraint::Min(20),
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title(" Tunnels "))
+        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+        .highlight_symbol("► ");
+
+    frame.render_stateful_widget(table, area, &mut app.tunnel_list_state);
+}
+
+fn draw_tunnel_list_help(frame: &mut Frame, app: &App, area: Rect) {
+    let help_text = if app.is_disconnected() {
+        Line::from(vec![
+            Span::styled(" q ", Style::default().fg(Color::Yellow)),
+            Span::raw("Quit"),
+        ])
+    } else if app.is_reconnecting() {
+        Line::from(vec![
+            Span::styled(" q ", Style::default().fg(Color::Yellow)),
+            Span::raw("Quit "),
+            Span::styled("(reconnecting...)", Style::default().fg(Color::DarkGray)),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(" a ", Style::default().fg(Color::Yellow)),
+            Span::raw("Add tunnel "),
+            Span::styled(" Enter ", Style::default().fg(Color::Yellow)),
+            Span::raw("View requests "),
+            Span::styled(" j/k ", Style::default().fg(Color::Yellow)),
+            Span::raw("Navigate "),
+            Span::styled(" q ", Style::default().fg(Color::Yellow)),
+            Span::raw("Quit"),
+        ])
+    };
+
+    let help = Paragraph::new(help_text).block(Block::default().borders(Borders::TOP));
+    frame.render_widget(help, area);
+}
+
+fn draw_add_tunnel_view(frame: &mut Frame, app: &mut App) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),  // Status bar
+            Constraint::Length(12), // Form
+            Constraint::Min(1),     // Spacer
+            Constraint::Length(2),  // Help footer
+        ])
+        .split(frame.area());
+
+    draw_status_bar(frame, app, chunks[0]);
+
+    // Form area - center it
+    let form_area = centered_rect(50, 10, chunks[1]);
+
+    let type_label = match app.add_tunnel_type {
+        TunnelType::Http => "[ HTTP ]  TCP  ",
+        TunnelType::Tcp => "  HTTP  [ TCP ]",
+    };
+
+    let type_style = if app.add_tunnel_field == AddTunnelField::TunnelType {
+        Style::default().fg(Color::Yellow).bold()
+    } else {
+        Style::default().fg(Color::White)
+    };
+
+    let port_style = if app.add_tunnel_field == AddTunnelField::Port {
+        Style::default().fg(Color::Yellow).bold()
+    } else {
+        Style::default().fg(Color::White)
+    };
+
+    let subdomain_style = if app.add_tunnel_field == AddTunnelField::Subdomain {
+        Style::default().fg(Color::Yellow).bold()
+    } else {
+        Style::default().fg(Color::Gray)
+    };
+
+    let port_cursor = if app.add_tunnel_field == AddTunnelField::Port {
+        "█"
+    } else {
+        ""
+    };
+
+    let subdomain_cursor = if app.add_tunnel_field == AddTunnelField::Subdomain
+        && app.add_tunnel_type == TunnelType::Http
+    {
+        "█"
+    } else {
+        ""
+    };
+
+    let mut form_lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Type:      ", Style::default().fg(Color::Gray)),
+            Span::styled(type_label, type_style),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Port:      ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!("{}{}", app.add_tunnel_port, port_cursor),
+                port_style,
+            ),
+        ]),
+    ];
+
+    if app.add_tunnel_type == TunnelType::Http {
+        form_lines.push(Line::from(""));
+        form_lines.push(Line::from(vec![
+            Span::styled("  Subdomain: ", Style::default().fg(Color::Gray)),
+            Span::styled(
+                format!(
+                    "{}{}",
+                    if app.add_tunnel_subdomain.is_empty() {
+                        "(auto)"
+                    } else {
+                        &app.add_tunnel_subdomain
+                    },
+                    subdomain_cursor
+                ),
+                subdomain_style,
+            ),
+        ]));
+    }
+
+    // Show error if any
+    if let Some(ref error) = app.add_tunnel_error {
+        form_lines.push(Line::from(""));
+        form_lines.push(Line::from(vec![Span::styled(
+            format!("  Error: {}", error),
+            Style::default().fg(Color::Red),
+        )]));
+    }
+
+    let form = Paragraph::new(form_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Add Tunnel ")
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    frame.render_widget(form, form_area);
+
+    // Help footer
+    let help_text = Line::from(vec![
+        Span::styled(" Tab/↓ ", Style::default().fg(Color::Yellow)),
+        Span::raw("Next field "),
+        Span::styled(" Space ", Style::default().fg(Color::Yellow)),
+        Span::raw("Toggle type "),
+        Span::styled(" Enter ", Style::default().fg(Color::Yellow)),
+        Span::raw("Create "),
+        Span::styled(" Esc ", Style::default().fg(Color::Yellow)),
+        Span::raw("Cancel"),
+    ]);
+
+    let help = Paragraph::new(help_text).block(Block::default().borders(Borders::TOP));
+    frame.render_widget(help, chunks[3]);
+}
+
+fn centered_rect(percent_x: u16, height: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length((r.height.saturating_sub(height)) / 2),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+fn draw_request_list_view(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -27,15 +368,15 @@ fn draw_list_view(frame: &mut Frame, app: &mut App) {
 
     draw_status_bar(frame, app, chunks[0]);
     draw_request_list(frame, app, chunks[1]);
-    draw_help_footer(frame, app, chunks[2]);
+    draw_request_list_help(frame, chunks[2]);
 }
 
 fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
-    let status_color = match app.connection_status {
-        super::events::ConnectionStatus::Connected => Color::Green,
-        super::events::ConnectionStatus::Connecting => Color::Yellow,
-        super::events::ConnectionStatus::Reconnecting => Color::Yellow,
-        super::events::ConnectionStatus::Disconnected => Color::Red,
+    let status_color = match &app.connection_status {
+        ConnectionStatus::Connected => Color::Green,
+        ConnectionStatus::Connecting => Color::Yellow,
+        ConnectionStatus::Reconnecting { .. } => Color::Yellow,
+        ConnectionStatus::Disconnected { .. } => Color::Red,
     };
 
     let mut status_parts = vec![
@@ -71,8 +412,8 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     ));
 
     let status_line = Line::from(status_parts);
-    let status = Paragraph::new(status_line)
-        .block(Block::default().borders(Borders::ALL).title(" Status "));
+    let status =
+        Paragraph::new(status_line).block(Block::default().borders(Borders::ALL).title(" Status "));
 
     frame.render_widget(status, area);
 }
@@ -123,7 +464,7 @@ fn draw_request_list(frame: &mut Frame, app: &mut App, area: Rect) {
     frame.render_stateful_widget(table, area, &mut app.table_state);
 }
 
-fn draw_help_footer(frame: &mut Frame, _app: &App, area: Rect) {
+fn draw_request_list_help(frame: &mut Frame, area: Rect) {
     let help_text = Line::from(vec![
         Span::styled(" j/↓ ", Style::default().fg(Color::Yellow)),
         Span::raw("Down "),
@@ -133,22 +474,23 @@ fn draw_help_footer(frame: &mut Frame, _app: &App, area: Rect) {
         Span::raw("Details "),
         Span::styled(" c ", Style::default().fg(Color::Yellow)),
         Span::raw("Clear "),
+        Span::styled(" Esc ", Style::default().fg(Color::Yellow)),
+        Span::raw("Tunnels "),
         Span::styled(" q ", Style::default().fg(Color::Yellow)),
         Span::raw("Quit"),
     ]);
 
-    let help = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::TOP));
+    let help = Paragraph::new(help_text).block(Block::default().borders(Borders::TOP));
 
     frame.render_widget(help, area);
 }
 
-fn draw_detail_view(frame: &mut Frame, app: &App) {
+fn draw_detail_view(frame: &mut Frame, app: &mut App) {
     let Some(selected) = app.table_state.selected() else {
-        return draw_list_view(frame, &mut app.clone());
+        return draw_request_list_view(frame, app);
     };
 
-    let Some(req) = app.requests.get(selected) else {
+    let Some(req) = app.requests.get(selected).cloned() else {
         return;
     };
 
@@ -183,35 +525,42 @@ fn draw_detail_view(frame: &mut Frame, app: &App) {
         Span::styled(status_text, status_color(req.status)),
     ]);
 
-    let title_bar = Paragraph::new(title)
-        .block(Block::default().borders(Borders::ALL).title(" Request Detail "));
+    let title_bar = Paragraph::new(title).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Request Detail "),
+    );
     frame.render_widget(title_bar, chunks[0]);
 
     // Content area split into sections
-    let has_request_body = req.request_body.as_ref().map(|b| !b.is_empty()).unwrap_or(false);
+    let has_request_body = req
+        .request_body
+        .as_ref()
+        .map(|b| !b.is_empty())
+        .unwrap_or(false);
     let content_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(if has_request_body {
             vec![
-                Constraint::Length(5),  // Summary info
-                Constraint::Length(5),  // Request headers
-                Constraint::Length(5),  // Request body
-                Constraint::Length(5),  // Response headers
-                Constraint::Min(3),     // Response body
+                Constraint::Length(5), // Summary info
+                Constraint::Length(5), // Request headers
+                Constraint::Length(5), // Request body
+                Constraint::Length(5), // Response headers
+                Constraint::Min(3),    // Response body
             ]
         } else {
             vec![
-                Constraint::Length(5),  // Summary info
-                Constraint::Length(6),  // Request headers
-                Constraint::Length(6),  // Response headers
-                Constraint::Min(3),     // Response body
+                Constraint::Length(5), // Summary info
+                Constraint::Length(6), // Request headers
+                Constraint::Length(6), // Response headers
+                Constraint::Min(3),    // Response body
             ]
         })
         .split(chunks[1]);
 
     // Summary section with key details
-    let user_agent = get_header_value(&req.request_headers, "user-agent")
-        .unwrap_or("-".to_string());
+    let user_agent =
+        get_header_value(&req.request_headers, "user-agent").unwrap_or("-".to_string());
     let client_ip = req.client_ip.as_deref().unwrap_or("-");
     let duration = req
         .duration_ms
@@ -243,7 +592,11 @@ fn draw_detail_view(frame: &mut Frame, app: &App) {
     // Request headers
     let req_headers_text = format_headers(&req.request_headers);
     let req_headers = Paragraph::new(req_headers_text)
-        .block(Block::default().borders(Borders::ALL).title(" Request Headers "))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Request Headers "),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(req_headers, content_chunks[1]);
 
@@ -256,7 +609,11 @@ fn draw_detail_view(frame: &mut Frame, app: &App) {
             .map(|b| format_body(b))
             .unwrap_or_else(|| "No body".to_string());
         let req_body = Paragraph::new(req_body_text)
-            .block(Block::default().borders(Borders::ALL).title(" Request Body "))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Request Body "),
+            )
             .wrap(Wrap { trim: false });
         frame.render_widget(req_body, content_chunks[2]);
         (3, 4)
@@ -267,7 +624,11 @@ fn draw_detail_view(frame: &mut Frame, app: &App) {
     // Response headers
     let resp_headers_text = format_headers(&req.response_headers);
     let resp_headers = Paragraph::new(resp_headers_text)
-        .block(Block::default().borders(Borders::ALL).title(" Response Headers "))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Response Headers "),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(resp_headers, content_chunks[resp_headers_idx]);
 
@@ -278,7 +639,11 @@ fn draw_detail_view(frame: &mut Frame, app: &App) {
         .map(|b| format_body(b))
         .unwrap_or_else(|| "No body".to_string());
     let body = Paragraph::new(body_text)
-        .block(Block::default().borders(Borders::ALL).title(" Response Body "))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Response Body "),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(body, content_chunks[resp_body_idx]);
 
@@ -290,8 +655,7 @@ fn draw_detail_view(frame: &mut Frame, app: &App) {
         Span::raw("Quit"),
     ]);
 
-    let help = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::TOP));
+    let help = Paragraph::new(help_text).block(Block::default().borders(Borders::TOP));
     frame.render_widget(help, chunks[2]);
 }
 
@@ -308,9 +672,9 @@ fn method_color(method: &str) -> Style {
 
 fn status_color(status: Option<u16>) -> Style {
     match status {
-        Some(s) if s >= 200 && s < 300 => Style::default().fg(Color::Green),
-        Some(s) if s >= 300 && s < 400 => Style::default().fg(Color::Cyan),
-        Some(s) if s >= 400 && s < 500 => Style::default().fg(Color::Yellow),
+        Some(s) if (200..300).contains(&s) => Style::default().fg(Color::Green),
+        Some(s) if (300..400).contains(&s) => Style::default().fg(Color::Cyan),
+        Some(s) if (400..500).contains(&s) => Style::default().fg(Color::Yellow),
         Some(s) if s >= 500 => Style::default().fg(Color::Red),
         _ => Style::default().fg(Color::Gray),
     }
