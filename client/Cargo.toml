@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
 
 # WebSocket client
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
@@ -30,15 +31,14 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Cryptography (Ed25519)
-ed25519-dalek = { version = "2", features = ["rand_core"] }
-rand = "0.8"
-
 # Base64 encoding
 base64 = "0.22"
 
 # CLI argument parsing
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
+
+# Config file parsing
+toml = "0.8"
 
 # Error handling
 thiserror = "1"
@@ -59,8 +59,12 @@ directories = "5"
 # URL parsing
 url = "2"
 
+# Open URLs in browser
+open = "5"
+
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = "3"
 
 [profile.release]
 lto = true

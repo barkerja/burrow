@@ -1,52 +1,66 @@
 use anyhow::{Context, Result};
 use base64::Engine;
 use chrono::Local;
-use futures_util::{FutureExt, SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
-use crate::crypto::{create_attestation, Keypair};
-use crate::protocol::{decode_body, IncomingMessage, OutgoingMessage};
+const MAX_RECONNECT_ATTEMPTS: u32 = 10;
+const INITIAL_BACKOFF_MS: u64 = 1000;
+const MAX_BACKOFF_MS: u64 = 60_000;
+const BACKOFF_MULTIPLIER: f64 = 1.5;
+
+use crate::protocol::{
+    decode_body, IncomingMessage, OutgoingMessage, TcpId, TcpTunnelId, TunnelId, WsId,
+};
 
 use super::http_proxy::forward_http_request;
 use super::tui::{
-    ConnectionStatus, RequestEvent, ResponseEvent, TcpTunnelEvent, TuiEvent, TunnelEvent,
+    ConnectionStatus, RequestEvent, ResponseEvent, TcpTunnelEvent, TuiCommand, TuiEvent,
+    TunnelEvent,
 };
 use super::ws_proxy::WebSocketProxy;
 
+/// Configuration for a tunnel to restore on reconnect
+#[derive(Debug, Clone)]
+enum TunnelConfig {
+    Http {
+        local_port: u16,
+        subdomain: Option<String>,
+    },
+    Tcp {
+        local_port: u16,
+    },
+}
+
 /// Information about a registered tunnel
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct TunnelInfo {
-    pub tunnel_id: String,
-    pub subdomain: String,
-    pub full_url: String,
-    pub local_host: String,
-    pub local_port: u16,
+struct TunnelInfo {
+    #[allow(dead_code)]
+    full_url: String,
+    #[allow(dead_code)]
+    local_host: String,
+    local_port: u16,
 }
 
 /// Information about a registered TCP tunnel
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct TcpTunnelInfo {
-    pub tcp_tunnel_id: String,
-    pub server_port: u16,
-    pub local_port: u16,
+struct TcpTunnelInfo {
+    #[allow(dead_code)]
+    server_port: u16,
+    local_port: u16,
 }
 
 /// Pending tunnel registration
-#[allow(dead_code)]
 struct PendingTunnel {
     local_host: String,
     local_port: u16,
-    subdomain: Option<String>,
 }
 
 /// Active TCP connection state
@@ -55,28 +69,25 @@ struct TcpConnection {
 }
 
 /// Shared state for the tunnel client
-#[allow(dead_code)]
 struct ClientState {
     /// Registered HTTP tunnels (tunnel_id -> info)
-    tunnels: HashMap<String, TunnelInfo>,
+    tunnels: HashMap<TunnelId, TunnelInfo>,
     /// Pending HTTP tunnel registrations (index -> pending info)
     pending_tunnels: Vec<PendingTunnel>,
     /// Registered TCP tunnels (tcp_tunnel_id -> info)
-    tcp_tunnels: HashMap<String, TcpTunnelInfo>,
+    tcp_tunnels: HashMap<TcpTunnelId, TcpTunnelInfo>,
     /// Pending TCP tunnel registrations (local_port -> waiting)
     pending_tcp_tunnels: Vec<u16>,
     /// Active TCP connections (tcp_id -> connection)
-    tcp_connections: HashMap<String, TcpConnection>,
+    tcp_connections: HashMap<TcpId, TcpConnection>,
     /// Active WebSocket proxies (ws_id -> proxy)
-    ws_proxies: HashMap<String, Arc<WebSocketProxy>>,
-    /// Server host for display
-    server_host: String,
+    ws_proxies: HashMap<WsId, Arc<WebSocketProxy>>,
     /// Local host for forwarding
     local_host: String,
 }
 
 impl ClientState {
-    fn new(server_host: &str, local_host: &str) -> Self {
+    fn new(local_host: &str) -> Self {
         Self {
             tunnels: HashMap::new(),
             pending_tunnels: Vec::new(),
@@ -84,16 +95,15 @@ impl ClientState {
             pending_tcp_tunnels: Vec::new(),
             tcp_connections: HashMap::new(),
             ws_proxies: HashMap::new(),
-            server_host: server_host.to_string(),
             local_host: local_host.to_string(),
         }
     }
 
-    fn find_tunnel_port(&self, tunnel_id: &str) -> Option<u16> {
+    fn find_tunnel_port(&self, tunnel_id: &TunnelId) -> Option<u16> {
         self.tunnels.get(tunnel_id).map(|t| t.local_port)
     }
 
-    fn find_tcp_tunnel(&self, tcp_tunnel_id: &str) -> Option<&TcpTunnelInfo> {
+    fn find_tcp_tunnel(&self, tcp_tunnel_id: &TcpTunnelId) -> Option<&TcpTunnelInfo> {
         self.tcp_tunnels.get(tcp_tunnel_id)
     }
 }
@@ -102,10 +112,11 @@ pub struct TunnelClient {
     server_host: String,
     server_port: u16,
     local_host: String,
-    tunnels: Vec<(u16, Option<String>)>,
-    tcp_ports: Vec<u16>,
-    keypair_path: Option<PathBuf>,
+    token: String,
     tui_tx: Option<mpsc::Sender<TuiEvent>>,
+    cmd_rx: Option<mpsc::Receiver<TuiCommand>>,
+    registered_tunnels: Vec<TunnelConfig>,
+    last_error: Option<String>,
 }
 
 impl TunnelClient {
@@ -113,65 +124,86 @@ impl TunnelClient {
         server_host: &str,
         server_port: u16,
         local_host: &str,
-        tunnels: Vec<(u16, Option<String>)>,
-        tcp_ports: Vec<u16>,
-        keypair_path: Option<String>,
+        token: String,
         tui_tx: Option<mpsc::Sender<TuiEvent>>,
+        cmd_rx: mpsc::Receiver<TuiCommand>,
     ) -> Result<Self> {
         Ok(Self {
             server_host: server_host.to_string(),
             server_port,
             local_host: local_host.to_string(),
-            tunnels,
-            tcp_ports,
-            keypair_path: keypair_path.map(PathBuf::from),
+            token,
             tui_tx,
+            cmd_rx: Some(cmd_rx),
+            registered_tunnels: Vec::new(),
+            last_error: None,
         })
     }
 
-    pub async fn run(&self) -> Result<()> {
-        // Load or generate keypair
-        let keypair_path = self
-            .keypair_path
-            .clone()
-            .unwrap_or_else(crate::crypto::keypair::default_keypair_path);
-
-        info!("Using keypair: {}", keypair_path.display());
-        let keypair = Keypair::load_or_generate(&keypair_path)
-            .context("Failed to load or generate keypair")?;
-
-        // Reconnection loop with exponential backoff
-        let mut retry_delay = Duration::from_secs(1);
-        let max_delay = Duration::from_secs(60);
+    pub async fn run(mut self) -> Result<()> {
+        let mut attempt = 0u32;
+        let mut backoff_ms = INITIAL_BACKOFF_MS;
 
         loop {
-            self.send_tui_event(TuiEvent::ConnectionStatus(ConnectionStatus::Connecting))
+            attempt += 1;
+
+            let status = if attempt == 1 {
+                ConnectionStatus::Connecting
+            } else {
+                ConnectionStatus::Reconnecting {
+                    attempt,
+                    reason: self.last_error.clone().unwrap_or_default(),
+                    next_retry_secs: 0,
+                }
+            };
+            self.send_tui_event(TuiEvent::ConnectionStatus(status))
                 .await;
 
-            match self.connect_and_run(&keypair).await {
+            match self.connect_and_run_once().await {
                 Ok(()) => {
                     info!("Connection closed normally");
-                    self.send_tui_event(TuiEvent::ConnectionStatus(ConnectionStatus::Disconnected))
-                        .await;
+                    self.send_tui_event(TuiEvent::ConnectionStatus(
+                        ConnectionStatus::Disconnected {
+                            reason: "Connection closed".into(),
+                        },
+                    ))
+                    .await;
                     break;
                 }
                 Err(e) => {
-                    error!("Connection error: {}", e);
-                    self.send_tui_event(TuiEvent::ConnectionStatus(ConnectionStatus::Reconnecting))
+                    let reason = e.to_string();
+                    self.last_error = Some(reason.clone());
+                    error!("Connection error: {}", reason);
+
+                    if attempt >= MAX_RECONNECT_ATTEMPTS {
+                        self.send_tui_event(TuiEvent::ConnectionStatus(
+                            ConnectionStatus::Disconnected {
+                                reason: format!("Failed after {} attempts: {}", attempt, reason),
+                            },
+                        ))
                         .await;
-                    info!("Reconnecting in {:?}...", retry_delay);
-                    tokio::time::sleep(retry_delay).await;
+                        return Err(e);
+                    }
 
-                    // Exponential backoff
-                    retry_delay = std::cmp::min(retry_delay * 2, max_delay);
+                    let retry_secs = backoff_ms / 1000;
+                    self.send_tui_event(TuiEvent::ConnectionStatus(
+                        ConnectionStatus::Reconnecting {
+                            attempt,
+                            reason: reason.clone(),
+                            next_retry_secs: retry_secs,
+                        },
+                    ))
+                    .await;
+
+                    info!(
+                        "Reconnecting in {}s (attempt {}/{})",
+                        retry_secs, attempt, MAX_RECONNECT_ATTEMPTS
+                    );
+                    tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+
+                    backoff_ms = ((backoff_ms as f64) * BACKOFF_MULTIPLIER) as u64;
+                    backoff_ms = backoff_ms.min(MAX_BACKOFF_MS);
                 }
-            }
-
-            // Check for shutdown signal
-            if tokio::signal::ctrl_c().now_or_never().is_some() {
-                info!("Shutdown requested");
-                self.send_tui_event(TuiEvent::Shutdown).await;
-                break;
             }
         }
 
@@ -184,7 +216,14 @@ impl TunnelClient {
         }
     }
 
-    async fn connect_and_run(&self, keypair: &Keypair) -> Result<()> {
+    fn track_tunnel(&mut self, config: TunnelConfig) {
+        self.registered_tunnels.push(config);
+    }
+
+    async fn connect_and_run_once(&mut self) -> Result<()> {
+        // Take the command receiver on first call
+        let cmd_rx = self.cmd_rx.take();
+
         // Connect to server
         let ws_url = format!("wss://{}:{}/tunnel/ws", self.server_host, self.server_port);
         info!("Connecting to {}...", ws_url);
@@ -199,68 +238,168 @@ impl TunnelClient {
 
         // Split the stream
         let (write, read) = ws_stream.split();
-        let write = Arc::new(Mutex::new(write));
 
-        // Create message channel
+        // Create message channel - text messages go through this
         let (msg_tx, mut msg_rx) = mpsc::channel::<String>(256);
-
-        // Initialize state
-        let state = Arc::new(RwLock::new(ClientState::new(
-            &self.server_host,
-            &self.local_host,
-        )));
-
-        // Set up pending tunnels
-        {
-            let mut s = state.write().await;
-            for (port, subdomain) in &self.tunnels {
-                s.pending_tunnels.push(PendingTunnel {
-                    local_host: self.local_host.clone(),
-                    local_port: *port,
-                    subdomain: subdomain.clone(),
-                });
-            }
-            s.pending_tcp_tunnels = self.tcp_ports.clone();
-        }
-
-        // Register HTTP tunnels
-        for (i, (local_port, subdomain)) in self.tunnels.iter().enumerate() {
-            let attestation = create_attestation(keypair, subdomain.as_deref());
-            let msg =
-                OutgoingMessage::register_tunnel(attestation, &self.local_host, *local_port);
-            let json = msg.to_json()?;
-
-            let mut write_guard = write.lock().await;
-            write_guard.send(Message::Text(json)).await?;
-            drop(write_guard);
-
-            debug!("Sent register_tunnel {} for port {}", i, local_port);
-        }
 
         // Channel for raw WebSocket messages (including pong frames)
         let (ws_tx, mut ws_rx) = mpsc::channel::<Message>(256);
 
-        // Spawn message sender task
-        let write_clone = write.clone();
+        // Channel for tracking newly registered tunnels
+        let (tunnel_config_tx, mut tunnel_config_rx) = mpsc::channel::<TunnelConfig>(16);
+
+        // Spawn message sender task - owns the write half exclusively
         let sender_handle = tokio::spawn(async move {
-            while let Some(msg) = ws_rx.recv().await {
-                let mut write_guard = write_clone.lock().await;
-                if let Err(e) = write_guard.send(msg).await {
-                    // Only log if it's not a normal close
-                    if !e.to_string().contains("closing") {
-                        debug!("Send error (connection closing): {}", e);
+            let mut write = write;
+            loop {
+                tokio::select! {
+                    Some(msg) = ws_rx.recv() => {
+                        if let Err(e) = write.send(msg).await {
+                            if !e.to_string().contains("closing") {
+                                debug!("Send error (connection closing): {}", e);
+                            }
+                            break;
+                        }
                     }
-                    break;
+                    Some(text) = msg_rx.recv() => {
+                        if let Err(e) = write.send(Message::Text(text)).await {
+                            if !e.to_string().contains("closing") {
+                                debug!("Send error (connection closing): {}", e);
+                            }
+                            break;
+                        }
+                    }
+                    else => break,
                 }
             }
         });
 
-        // Bridge text messages to WebSocket messages
-        let ws_tx_clone = ws_tx.clone();
-        let text_bridge_handle = tokio::spawn(async move {
-            while let Some(text) = msg_rx.recv().await {
-                if ws_tx_clone.send(Message::Text(text)).await.is_err() {
-                    break;
+        // Initialize state
+        let state = Arc::new(RwLock::new(ClientState::new(&self.local_host)));
+
+        // Re-register existing tunnels on reconnect
+        for config in &self.registered_tunnels {
+            match config {
+                TunnelConfig::Http {
+                    local_port,
+                    subdomain,
+                } => {
+                    let mut s = state.write().await;
+                    s.pending_tunnels.push(PendingTunnel {
+                        local_host: self.local_host.clone(),
+                        local_port: *local_port,
+                    });
+                    drop(s);
+
+                    let msg = OutgoingMessage::register_tunnel(
+                        &self.token,
+                        &self.local_host,
+                        *local_port,
+                        subdomain.clone(),
+                    );
+                    if let Ok(json) = msg.to_json() {
+                        let _ = msg_tx.send(json).await;
+                        debug!("Re-registering HTTP tunnel for port {}", local_port);
+                    }
+                }
+                TunnelConfig::Tcp { local_port } => {
+                    let mut s = state.write().await;
+                    s.pending_tcp_tunnels.push(*local_port);
+                    drop(s);
+
+                    let msg = OutgoingMessage::register_tcp_tunnel(*local_port);
+                    if let Ok(json) = msg.to_json() {
+                        let _ = msg_tx.send(json).await;
+                        debug!("Re-registering TCP tunnel for port {}", local_port);
+                    }
+                }
+            }
+        }
+
+        // Spawn command handler task if we have a receiver
+        let command_handle = if let Some(mut cmd_rx) = cmd_rx {
+            let msg_tx_cmd = msg_tx.clone();
+            let token_clone = self.token.clone();
+            let local_host_clone = self.local_host.clone();
+            let state_cmd = state.clone();
+            let tunnel_config_tx = tunnel_config_tx.clone();
+
+            Some(tokio::spawn(async move {
+                while let Some(cmd) = cmd_rx.recv().await {
+                    match cmd {
+                        TuiCommand::AddHttpTunnel {
+                            local_port,
+                            subdomain,
+                        } => {
+                            // Track for reconnect
+                            let _ = tunnel_config_tx
+                                .send(TunnelConfig::Http {
+                                    local_port,
+                                    subdomain: subdomain.clone(),
+                                })
+                                .await;
+
+                            // Add to pending tunnels
+                            {
+                                let mut s = state_cmd.write().await;
+                                s.pending_tunnels.push(PendingTunnel {
+                                    local_host: local_host_clone.clone(),
+                                    local_port,
+                                });
+                            }
+                            // Send registration message
+                            let msg = OutgoingMessage::register_tunnel(
+                                &token_clone,
+                                &local_host_clone,
+                                local_port,
+                                subdomain,
+                            );
+                            if let Ok(json) = msg.to_json() {
+                                if msg_tx_cmd.send(json).await.is_err() {
+                                    break;
+                                }
+                                debug!("Sent register_tunnel for port {}", local_port);
+                            }
+                        }
+                        TuiCommand::AddTcpTunnel { local_port } => {
+                            // Track for reconnect
+                            let _ = tunnel_config_tx
+                                .send(TunnelConfig::Tcp { local_port })
+                                .await;
+
+                            // Add to pending TCP tunnels
+                            {
+                                let mut s = state_cmd.write().await;
+                                s.pending_tcp_tunnels.push(local_port);
+                            }
+                            // Send registration message
+                            let msg = OutgoingMessage::register_tcp_tunnel(local_port);
+                            if let Ok(json) = msg.to_json() {
+                                if msg_tx_cmd.send(json).await.is_err() {
+                                    break;
+                                }
+                                debug!("Sent register_tcp_tunnel for port {}", local_port);
+                            }
+                        }
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+
+        // Spawn heartbeat sender task - sends heartbeat every 25 seconds
+        let msg_tx_heartbeat = msg_tx.clone();
+        let heartbeat_handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(25));
+            loop {
+                interval.tick().await;
+                let msg = OutgoingMessage::Heartbeat {};
+                if let Ok(json) = msg.to_json() {
+                    if msg_tx_heartbeat.send(json).await.is_err() {
+                        break;
+                    }
+                    debug!("Sent heartbeat");
                 }
             }
         });
@@ -323,26 +462,49 @@ impl TunnelClient {
         // Drop the senders to signal tasks to stop when we're done
         drop(msg_tx);
         drop(ws_tx);
+        drop(tunnel_config_tx);
+
+        // Collect any tunnel configs that were registered
+        while let Ok(config) = tunnel_config_rx.try_recv() {
+            self.track_tunnel(config);
+        }
 
         // Wait for shutdown or disconnect
-        tokio::select! {
+        let result = tokio::select! {
             _ = sender_handle => {
                 debug!("Sender task ended");
+                Err(anyhow::anyhow!("Connection lost"))
             }
-            _ = text_bridge_handle => {
-                debug!("Text bridge task ended");
+            _ = heartbeat_handle => {
+                debug!("Heartbeat task ended");
+                Err(anyhow::anyhow!("Connection lost"))
             }
             _ = receiver_handle => {
                 debug!("Receiver task ended");
+                Err(anyhow::anyhow!("Connection lost"))
+            }
+            _ = async {
+                if let Some(handle) = command_handle {
+                    handle.await
+                } else {
+                    std::future::pending::<Result<(), tokio::task::JoinError>>().await
+                }
+            } => {
+                debug!("Command handler task ended");
+                Err(anyhow::anyhow!("Connection lost"))
             }
             _ = tokio::signal::ctrl_c() => {
                 info!("\nShutting down...");
-                return Ok(());
+                Ok(())
             }
+        };
+
+        // Collect any remaining tunnel configs
+        while let Ok(config) = tunnel_config_rx.try_recv() {
+            self.track_tunnel(config);
         }
 
-        // If we get here, connection was lost
-        Err(anyhow::anyhow!("Connection lost"))
+        result
     }
 }
 
@@ -360,7 +522,7 @@ async fn handle_message(
     match msg {
         IncomingMessage::TunnelRegistered {
             tunnel_id,
-            subdomain,
+            subdomain: _,
             full_url,
         } => {
             let mut s = state.write().await;
@@ -371,7 +533,10 @@ async fn handle_message(
                 .map(|p| (p.local_host.clone(), p.local_port))
                 .unwrap_or_else(|| (s.local_host.clone(), 0));
 
-            info!("Tunnel registered: {} -> {}:{}", full_url, local_host, local_port);
+            info!(
+                "Tunnel registered: {} -> {}:{}",
+                full_url, local_host, local_port
+            );
 
             // Send TUI event
             if let Some(tx) = tui_tx {
@@ -384,10 +549,8 @@ async fn handle_message(
             }
 
             s.tunnels.insert(
-                tunnel_id.clone(),
+                tunnel_id,
                 TunnelInfo {
-                    tunnel_id,
-                    subdomain,
                     full_url,
                     local_host,
                     local_port,
@@ -395,24 +558,6 @@ async fn handle_message(
             );
 
             *tunnels_registered += 1;
-
-            // Register TCP tunnels after first HTTP tunnel
-            if *tunnels_registered == 1 && !s.pending_tcp_tunnels.is_empty() {
-                for tcp_port in &s.pending_tcp_tunnels.clone() {
-                    let msg = OutgoingMessage::register_tcp_tunnel(*tcp_port);
-                    if let Ok(json) = msg.to_json() {
-                        let _ = msg_tx.send(json).await;
-                    }
-                }
-            }
-
-            // Print status once all HTTP tunnels are registered (only in non-TUI mode)
-            if tui_tx.is_none()
-                && *tunnels_registered == s.pending_tunnels.len()
-                && s.pending_tcp_tunnels.is_empty()
-            {
-                print_status(&s, server_host);
-            }
         }
 
         IncomingMessage::TcpTunnelRegistered {
@@ -438,23 +583,14 @@ async fn handle_message(
             }
 
             s.tcp_tunnels.insert(
-                tcp_tunnel_id.clone(),
+                tcp_tunnel_id,
                 TcpTunnelInfo {
-                    tcp_tunnel_id,
                     server_port,
                     local_port,
                 },
             );
 
             *tcp_tunnels_registered += 1;
-
-            // Print status once all tunnels are registered (only in non-TUI mode)
-            if tui_tx.is_none()
-                && *tunnels_registered == s.pending_tunnels.len()
-                && *tcp_tunnels_registered == s.pending_tcp_tunnels.len()
-            {
-                print_status(&s, server_host);
-            }
         }
 
         IncomingMessage::TunnelRequest {
@@ -560,7 +696,10 @@ async fn handle_message(
                                 .send(TuiEvent::ResponseSent(ResponseEvent {
                                     request_id: request_id_clone.clone(),
                                     status: 502,
-                                    headers: vec![("content-type".to_string(), "text/plain".to_string())],
+                                    headers: vec![(
+                                        "content-type".to_string(),
+                                        "text/plain".to_string(),
+                                    )],
                                     body: Some(format!("Bad Gateway: {}", e).into_bytes()),
                                     duration_ms,
                                 }))
@@ -593,7 +732,10 @@ async fn handle_message(
             let local_host = s.local_host.clone();
             drop(s);
 
-            info!("WebSocket upgrade request: {} -> localhost:{}", ws_id, local_port);
+            info!(
+                "WebSocket upgrade request: {} -> localhost:{}",
+                ws_id, local_port
+            );
             debug!("WebSocket path: {}", path);
 
             let msg_tx = msg_tx.clone();
@@ -601,9 +743,20 @@ async fn handle_message(
             let ws_id_clone = ws_id.clone();
 
             tokio::spawn(async move {
-                match WebSocketProxy::connect(&local_host, local_port, &path, headers, msg_tx.clone()).await {
+                match WebSocketProxy::connect(
+                    &local_host,
+                    local_port,
+                    &path,
+                    headers,
+                    msg_tx.clone(),
+                )
+                .await
+                {
                     Ok(proxy) => {
-                        info!("WebSocket connected: {} -> localhost:{}", ws_id_clone, local_port);
+                        info!(
+                            "WebSocket connected: {} -> localhost:{}",
+                            ws_id_clone, local_port
+                        );
                         // Send ws_upgraded
                         let msg = OutgoingMessage::WsUpgraded {
                             ws_id: ws_id_clone.clone(),
@@ -663,10 +816,16 @@ async fn handle_message(
             }
         }
 
-        IncomingMessage::WsClose { ws_id, code, reason } => {
+        IncomingMessage::WsClose {
+            ws_id,
+            code,
+            reason,
+        } => {
             let mut s = state.write().await;
             if let Some(proxy) = s.ws_proxies.remove(&ws_id) {
-                proxy.close(code.unwrap_or(1000), reason.as_deref().unwrap_or("")).await;
+                proxy
+                    .close(code.unwrap_or(1000), reason.as_deref().unwrap_or(""))
+                    .await;
             }
         }
 
@@ -688,7 +847,10 @@ async fn handle_message(
                 tokio::spawn(async move {
                     match TcpStream::connect(format!("localhost:{}", local_port)).await {
                         Ok(stream) => {
-                            info!("TCP connected to localhost:{}, starting forwarding", local_port);
+                            info!(
+                                "TCP connected to localhost:{}, starting forwarding",
+                                local_port
+                            );
                             // Send tcp_connected
                             let msg = OutgoingMessage::tcp_connected(&tcp_id_clone);
                             if let Ok(json) = msg.to_json() {
@@ -756,7 +918,7 @@ async fn handle_message(
 
 async fn handle_tcp_connection(
     stream: TcpStream,
-    tcp_id: &str,
+    tcp_id: &TcpId,
     msg_tx: mpsc::Sender<String>,
     state: Arc<RwLock<ClientState>>,
 ) {
@@ -769,10 +931,10 @@ async fn handle_tcp_connection(
     {
         let mut s = state.write().await;
         s.tcp_connections
-            .insert(tcp_id.to_string(), TcpConnection { tx: local_tx });
+            .insert(tcp_id.clone(), TcpConnection { tx: local_tx });
     }
 
-    let tcp_id_owned = tcp_id.to_string();
+    let tcp_id_owned = tcp_id.clone();
     let msg_tx_clone = msg_tx.clone();
 
     // Task to read from local and send to server
@@ -828,35 +990,4 @@ async fn handle_tcp_connection(
         let mut s = state.write().await;
         s.tcp_connections.remove(tcp_id);
     }
-}
-
-fn print_status(state: &ClientState, server_host: &str) {
-    println!();
-    println!("=== Tunnels Active ===");
-    println!();
-
-    if !state.tunnels.is_empty() {
-        println!("HTTP:");
-        for info in state.tunnels.values() {
-            println!(
-                "  {} -> {}:{}",
-                info.full_url, info.local_host, info.local_port
-            );
-        }
-    }
-
-    if !state.tcp_tunnels.is_empty() {
-        println!();
-        println!("TCP:");
-        for info in state.tcp_tunnels.values() {
-            println!(
-                "  {}:{} -> localhost:{}",
-                server_host, info.server_port, info.local_port
-            );
-        }
-    }
-
-    println!();
-    println!("Press Ctrl+C to stop all tunnels.");
-    println!();
 }

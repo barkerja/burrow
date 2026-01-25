@@ -1,27 +1,20 @@
 use serde::{Deserialize, Serialize};
 
-/// Attestation for client authentication
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Attestation {
-    pub public_key: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub requested_subdomain: Option<String>,
-    pub timestamp: u64,
-    pub signature: String,
-}
+use super::ids::{RequestId, TcpId, TcpTunnelId, TunnelId, WsId};
 
 /// Outgoing message types (Client -> Server)
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[allow(dead_code)]
 pub enum OutgoingMessage {
     RegisterTunnel {
-        attestation: Attestation,
+        token: String,
         local_host: String,
         local_port: u16,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        requested_subdomain: Option<String>,
     },
     TunnelResponse {
-        request_id: String,
+        request_id: RequestId,
         status: u16,
         headers: Vec<[String; 2]>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -30,18 +23,18 @@ pub enum OutgoingMessage {
         body_encoding: Option<String>,
     },
     WsUpgraded {
-        ws_id: String,
+        ws_id: WsId,
         headers: Vec<[String; 2]>,
     },
     WsFrame {
-        ws_id: String,
+        ws_id: WsId,
         opcode: String,
         data: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         data_encoding: Option<String>,
     },
     WsClose {
-        ws_id: String,
+        ws_id: WsId,
         code: u16,
         reason: String,
     },
@@ -49,20 +42,18 @@ pub enum OutgoingMessage {
         local_port: u16,
     },
     TcpConnected {
-        tcp_id: String,
+        tcp_id: TcpId,
     },
     TcpData {
-        tcp_id: String,
+        tcp_id: TcpId,
         data: String,
         data_encoding: String,
     },
     TcpClose {
-        tcp_id: String,
+        tcp_id: TcpId,
         reason: String,
     },
-    Heartbeat {
-        timestamp: u64,
-    },
+    Heartbeat {},
 }
 
 /// Incoming message types (Server -> Client)
@@ -70,13 +61,14 @@ pub enum OutgoingMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum IncomingMessage {
     TunnelRegistered {
-        tunnel_id: String,
+        tunnel_id: TunnelId,
+        #[allow(dead_code)]
         subdomain: String,
         full_url: String,
     },
     TunnelRequest {
-        request_id: String,
-        tunnel_id: String,
+        request_id: RequestId,
+        tunnel_id: TunnelId,
         method: String,
         path: String,
         query_string: String,
@@ -89,50 +81,44 @@ pub enum IncomingMessage {
         client_ip: Option<String>,
     },
     WsUpgrade {
-        ws_id: String,
-        tunnel_id: String,
+        ws_id: WsId,
+        tunnel_id: TunnelId,
         path: String,
         headers: Vec<Vec<String>>,
     },
     WsFrame {
-        ws_id: String,
+        ws_id: WsId,
         opcode: String,
         data: String,
         #[serde(default)]
         data_encoding: Option<String>,
     },
     WsClose {
-        ws_id: String,
+        ws_id: WsId,
         #[serde(default)]
         code: Option<u16>,
         #[serde(default)]
         reason: Option<String>,
     },
     TcpTunnelRegistered {
-        tcp_tunnel_id: String,
+        tcp_tunnel_id: TcpTunnelId,
         server_port: u16,
         local_port: u16,
     },
     TcpConnect {
-        tcp_id: String,
-        tcp_tunnel_id: String,
+        tcp_id: TcpId,
+        tcp_tunnel_id: TcpTunnelId,
     },
     TcpData {
-        tcp_id: String,
+        tcp_id: TcpId,
         data: String,
         #[serde(default)]
         data_encoding: Option<String>,
     },
     TcpClose {
-        tcp_id: String,
-        #[serde(default)]
-        #[allow(dead_code)]
-        reason: Option<String>,
+        tcp_id: TcpId,
     },
-    Heartbeat {
-        #[allow(dead_code)]
-        timestamp: u64,
-    },
+    Heartbeat {},
     Error {
         code: String,
         message: String,
@@ -140,23 +126,29 @@ pub enum IncomingMessage {
 }
 
 impl OutgoingMessage {
-    pub fn register_tunnel(attestation: Attestation, local_host: &str, local_port: u16) -> Self {
+    pub fn register_tunnel(
+        token: &str,
+        local_host: &str,
+        local_port: u16,
+        requested_subdomain: Option<String>,
+    ) -> Self {
         OutgoingMessage::RegisterTunnel {
-            attestation,
+            token: token.to_string(),
             local_host: local_host.to_string(),
             local_port,
+            requested_subdomain,
         }
     }
 
     pub fn tunnel_response(
-        request_id: &str,
+        request_id: &RequestId,
         status: u16,
         headers: Vec<(String, String)>,
         body: Option<Vec<u8>>,
     ) -> Self {
         let (body_str, encoding) = encode_body(body);
         OutgoingMessage::TunnelResponse {
-            request_id: request_id.to_string(),
+            request_id: request_id.clone(),
             status,
             headers: headers.into_iter().map(|(k, v)| [k, v]).collect(),
             body: body_str,
@@ -168,34 +160,24 @@ impl OutgoingMessage {
         OutgoingMessage::RegisterTcpTunnel { local_port }
     }
 
-    pub fn tcp_connected(tcp_id: &str) -> Self {
+    pub fn tcp_connected(tcp_id: &TcpId) -> Self {
         OutgoingMessage::TcpConnected {
-            tcp_id: tcp_id.to_string(),
+            tcp_id: tcp_id.clone(),
         }
     }
 
-    pub fn tcp_data(tcp_id: &str, data: &[u8]) -> Self {
+    pub fn tcp_data(tcp_id: &TcpId, data: &[u8]) -> Self {
         OutgoingMessage::TcpData {
-            tcp_id: tcp_id.to_string(),
+            tcp_id: tcp_id.clone(),
             data: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data),
             data_encoding: "base64".to_string(),
         }
     }
 
-    pub fn tcp_close(tcp_id: &str, reason: &str) -> Self {
+    pub fn tcp_close(tcp_id: &TcpId, reason: &str) -> Self {
         OutgoingMessage::TcpClose {
-            tcp_id: tcp_id.to_string(),
+            tcp_id: tcp_id.clone(),
             reason: reason.to_string(),
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn heartbeat() -> Self {
-        OutgoingMessage::Heartbeat {
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
         }
     }
 
@@ -220,10 +202,8 @@ fn encode_body(body: Option<Vec<u8>>) -> (Option<String>, Option<String>) {
                 Ok(s) => (Some(s), None),
                 Err(_) => {
                     // Binary data, encode as base64
-                    let encoded = base64::Engine::encode(
-                        &base64::engine::general_purpose::STANDARD,
-                        &data,
-                    );
+                    let encoded =
+                        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
                     (Some(encoded), Some("base64".to_string()))
                 }
             }
