@@ -15,26 +15,26 @@ config :burrow, Burrow.Server.Web.Endpoint,
   render_errors: [formats: [html: Burrow.Server.Web.ErrorHTML], layout: false],
   pubsub_server: Burrow.PubSub
 
-# GitHub OAuth configuration for inspector authentication
-config :ueberauth, Ueberauth,
-  providers: [
-    github: {Ueberauth.Strategy.Github, [default_scope: "user:email,read:org"]}
-  ]
+# WebAuthn configuration for passkey authentication
+config :burrow, :webauthn,
+  origin: "http://localhost:4000",
+  rp_id: "localhost",
+  rp_name: "Burrow"
 
-# GitHub OAuth credentials - set via environment variables in runtime.exs
-# GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set for auth to work
-config :ueberauth, Ueberauth.Strategy.Github.OAuth,
-  client_id: nil,
-  client_secret: nil
-
-# Inspector authorization - defaults allow all authenticated users
-# Override via INSPECTOR_ALLOWED_USERS and INSPECTOR_ALLOWED_ORGS env vars
-config :burrow, :inspector_auth,
-  allowed_users: [],
-  allowed_orgs: []
+# Oban background job configuration
+config :burrow, Oban,
+  repo: Burrow.Repo,
+  queues: [default: 10]
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
+
+# Ecto Repo configuration
+config :burrow, ecto_repos: [Burrow.Repo]
+
+config :burrow, Burrow.Repo,
+  migration_primary_key: [type: :binary_id],
+  migration_timestamps: [type: :utc_datetime_usec]
 
 import_config "#{config_env()}.exs"

@@ -1,5 +1,34 @@
 import Config
 
+# PostgreSQL configuration (required)
+database_url =
+  System.get_env("DATABASE_URL") ||
+    raise "DATABASE_URL environment variable is not set"
+
+repo_config = [
+  url: database_url,
+  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+]
+
+repo_config =
+  if database_host = System.get_env("DATABASE_HOST") do
+    repo_config ++
+      [
+        ssl: [
+          verify: :verify_peer,
+          cacertfile: CAStore.file_path(),
+          server_name_indication: String.to_charlist(database_host),
+          customize_hostname_check: [
+            match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
+          ]
+        ]
+      ]
+  else
+    repo_config
+  end
+
+config :burrow, Burrow.Repo, repo_config
+
 # Read mode from environment variable (works in all envs)
 if mode = System.get_env("BURROW_MODE") do
   config :burrow, mode: String.to_existing_atom(mode)
@@ -43,25 +72,11 @@ if config_env() == :prod do
     secret_key_base: System.get_env("SECRET_KEY_BASE") || raise("SECRET_KEY_BASE required"),
     live_view: [signing_salt: System.get_env("LIVE_VIEW_SALT") || "burrow_inspector_prod"]
 
-  # GitHub OAuth for inspector authentication
-  if github_client_id = System.get_env("GITHUB_CLIENT_ID") do
-    config :ueberauth, Ueberauth.Strategy.Github.OAuth,
-      client_id: github_client_id,
-      client_secret:
-        System.get_env("GITHUB_CLIENT_SECRET") ||
-          raise("GITHUB_CLIENT_SECRET required when GITHUB_CLIENT_ID is set")
-  end
-
-  # Inspector authorization config
-  if allowed_users = System.get_env("INSPECTOR_ALLOWED_USERS") do
-    config :burrow, :inspector_auth,
-      allowed_users: String.split(allowed_users, ",") |> Enum.map(&String.trim/1),
-      allowed_orgs:
-        System.get_env("INSPECTOR_ALLOWED_ORGS", "")
-        |> String.split(",")
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == ""))
-  end
+  # WebAuthn configuration for production
+  config :burrow, :webauthn,
+    origin: "https://#{base_domain}",
+    rp_id: base_domain,
+    rp_name: "Burrow"
 
   # Production server configuration
   server_config = [
