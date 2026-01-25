@@ -205,7 +205,7 @@ Reserved subdomains are tied to your account and can't be used by others.
 
 ### Prerequisites
 
-- Elixir 1.18+ / OTP 27+
+- Elixir 1.19+ / OTP 28+
 - PostgreSQL 14+
 - A domain with DNS you control (for wildcard certs)
 
@@ -323,7 +323,7 @@ cargo clippy
 ## Tech Stack
 
 **Server:**
-- Elixir 1.18+ with OTP 27+
+- Elixir 1.19+ with OTP 28+
 - PostgreSQL - Request storage, user accounts
 - Bandit - Pure Elixir HTTP server with TLS
 - Phoenix LiveView - Request inspector UI
