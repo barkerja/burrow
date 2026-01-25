@@ -18,8 +18,8 @@ path = "src/main.rs"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# WebSocket client
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+# WebSocket client (rustls for cross-compilation support)
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
 http = "1"
 
