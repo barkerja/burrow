@@ -65,6 +65,10 @@ defmodule Burrow.Server.Supervisor do
     pending_name = Keyword.get(opts, :pending_name, Burrow.Server.PendingRequests)
 
     children = [
+      # Database
+      Burrow.Repo,
+      # Background jobs
+      {Oban, Application.fetch_env!(:burrow, Oban)},
       # PubSub for real-time updates
       {Phoenix.PubSub, name: Burrow.PubSub},
       # State management
@@ -72,10 +76,11 @@ defmodule Burrow.Server.Supervisor do
       {Burrow.Server.PendingRequests, name: pending_name},
       Burrow.Server.WSRegistry,
       Burrow.Server.TCPRegistry,
-      # Request inspector storage and IP lookup
+      # Request inspector IP lookup
       Burrow.Server.IPLookup,
-      Burrow.Server.RequestStore,
-      # Request inspector Phoenix endpoint (no separate server, plugged into main endpoint)
+      # Task supervisor for async operations (IP lookup)
+      {Task.Supervisor, name: Burrow.Server.TaskSupervisor},
+      # Request inspector Phoenix endpoint
       Burrow.Server.Web.Endpoint
     ]
 

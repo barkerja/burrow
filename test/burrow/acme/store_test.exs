@@ -118,8 +118,13 @@ defmodule Burrow.ACME.StoreTest do
       cert_pem = test_certificate()
       key_pem = test_private_key()
 
-      Store.save_certificate("domain1.example.com", cert_pem, key_pem, cert_pem, ["domain1.example.com"])
-      Store.save_certificate("domain2.example.com", cert_pem, key_pem, cert_pem, ["domain2.example.com"])
+      Store.save_certificate("domain1.example.com", cert_pem, key_pem, cert_pem, [
+        "domain1.example.com"
+      ])
+
+      Store.save_certificate("domain2.example.com", cert_pem, key_pem, cert_pem, [
+        "domain2.example.com"
+      ])
 
       certs = Store.list_certificates()
       domains = Enum.map(certs, fn {domain, _meta} -> domain end)

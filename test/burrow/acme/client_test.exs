@@ -80,7 +80,8 @@ defmodule Burrow.ACME.ClientTest do
       assert key["crv"] == "P-256"
       assert key["x"]
       assert key["y"]
-      assert key["d"]  # Private key component
+      # Private key component
+      assert key["d"]
     end
 
     test "generates unique keys" do

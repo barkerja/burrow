@@ -46,7 +46,9 @@ defmodule Burrow.Server.TCPListener do
 
     case find_available_port(port_range) do
       {:ok, listen_socket, server_port} ->
-        Logger.info("[TCPListener #{tcp_tunnel_id}] Listening on port #{server_port} -> local:#{local_port}")
+        Logger.info(
+          "[TCPListener #{tcp_tunnel_id}] Listening on port #{server_port} -> local:#{local_port}"
+        )
 
         # Register in registry
         TCPRegistry.register_tunnel(tcp_tunnel_id, %{

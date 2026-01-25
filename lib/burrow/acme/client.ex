@@ -240,7 +240,9 @@ defmodule Burrow.ACME.Client do
   def download_certificate(account, cert_url) do
     with {:ok, nonce} <- fetch_nonce(account.directory.new_nonce),
          {:ok, 200, _headers, body} <-
-           signed_request(account, cert_url, nil, nonce, accept: "application/pem-certificate-chain") do
+           signed_request(account, cert_url, nil, nonce,
+             accept: "application/pem-certificate-chain"
+           ) do
       {:ok, body}
     end
   end
@@ -271,7 +273,8 @@ defmodule Burrow.ACME.Client do
     {_pub, priv} = :crypto.generate_key(:ecdh, :secp256r1)
 
     # Convert to JWK format
-    <<4, x::binary-size(32), y::binary-size(32)>> = elem(:crypto.generate_key(:ecdh, :secp256r1, priv), 0)
+    <<4, x::binary-size(32), y::binary-size(32)>> =
+      elem(:crypto.generate_key(:ecdh, :secp256r1, priv), 0)
 
     %{
       "kty" => "EC",
@@ -301,6 +304,7 @@ defmodule Burrow.ACME.Client do
     }
 
     jwk = JOSE.JWK.from_map(key)
+
     protected = %{
       "alg" => "ES256",
       "nonce" => nonce,
@@ -427,6 +431,7 @@ defmodule Burrow.ACME.Client do
 
   defp get_header(headers, name) do
     name_lower = String.downcase(name)
+
     Enum.find_value(headers, fn {k, v} ->
       if String.downcase(k) == name_lower, do: v
     end)
