@@ -129,7 +129,8 @@ defmodule Burrow.Server.IPLookup do
     if private_ip?(ip) do
       {:ok, %{isp: "Private Network", city: "Local", region: nil, country: nil}}
     else
-      url = ~c"http://ip-api.com/json/#{ip}?fields=status,isp,org,city,regionName,country,countryCode"
+      url =
+        ~c"http://ip-api.com/json/#{ip}?fields=status,isp,org,city,regionName,country,countryCode"
 
       case :httpc.request(:get, {url, []}, [timeout: @lookup_timeout_ms], body_format: :binary) do
         {:ok, {{_, 200, _}, _headers, body}} ->
@@ -182,15 +183,23 @@ defmodule Burrow.Server.IPLookup do
 
   defp private_ip?(ip) do
     case String.split(ip, ".") do
-      ["10" | _] -> true
-      ["127" | _] -> true
-      ["192", "168" | _] -> true
+      ["10" | _] ->
+        true
+
+      ["127" | _] ->
+        true
+
+      ["192", "168" | _] ->
+        true
+
       ["172", second | _] ->
         case Integer.parse(second) do
           {n, ""} when n >= 16 and n <= 31 -> true
           _ -> false
         end
-      _ -> false
+
+      _ ->
+        false
     end
   end
 end

@@ -12,6 +12,9 @@ primary_region = 'ewr'
 
 [build]
 
+[deploy]
+  release_command = "/app/bin/burrow eval 'Burrow.Release.migrate()'"
+
 [http_service]
   internal_port = 443
   force_https = true
