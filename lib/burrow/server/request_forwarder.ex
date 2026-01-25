@@ -26,7 +26,7 @@ defmodule Burrow.Server.RequestForwarder do
     ErrorPage
   }
 
-  alias Burrow.Protocol.{Codec, Message}
+  alias Burrow.Protocol.{Codec, Fields, Message}
   alias Burrow.ULID
 
   @request_timeout_ms 30_000
@@ -184,12 +184,12 @@ defmodule Burrow.Server.RequestForwarder do
   end
 
   defp log_response(request_id, response, duration_ms) when is_map(response) do
-    status = get_field(response, :status, "status", 200)
-    headers = get_field(response, :headers, "headers", [])
-    body = get_field(response, :body, "body", "")
-    body_encoding = get_field(response, :body_encoding, "body_encoding", nil)
+    status = Fields.get(response, :status, 200)
+    headers = Fields.get(response, :headers, [])
+    body = Fields.get(response, :body, "")
+    body_encoding = Fields.get(response, :body_encoding)
 
-    decoded_body = decode_body(body, body_encoding)
+    decoded_body = Fields.decode_body(body, body_encoding)
     response_content_type = get_response_header(headers, "content-type")
 
     # Store raw body (before decoding) for inspector
@@ -275,13 +275,13 @@ defmodule Burrow.Server.RequestForwarder do
 
   defp build_response(conn, response) when is_map(response) do
     # Handle both atom and string keys (JSON decodes to strings)
-    status = get_field(response, :status, "status", 200)
-    headers = get_field(response, :headers, "headers", [])
-    body = get_field(response, :body, "body", "")
-    body_encoding = get_field(response, :body_encoding, "body_encoding", nil)
+    status = Fields.get(response, :status, 200)
+    headers = Fields.get(response, :headers, [])
+    body = Fields.get(response, :body, "")
+    body_encoding = Fields.get(response, :body_encoding)
 
     # Decode base64 body if needed
-    body = decode_body(body, body_encoding)
+    body = Fields.decode_body(body, body_encoding)
 
     # For gateway errors (502, 504) from the tunnel client, render a nice HTML error page
     # These are tunnel infrastructure errors, not application errors
@@ -319,19 +319,6 @@ defmodule Burrow.Server.RequestForwarder do
   end
 
   defp is_tunnel_error?(_), do: false
-
-  defp get_field(map, atom_key, string_key, default) do
-    Map.get(map, atom_key) || Map.get(map, string_key) || default
-  end
-
-  defp decode_body(body, "base64") when is_binary(body) do
-    case Base.decode64(body) do
-      {:ok, decoded} -> decoded
-      :error -> body
-    end
-  end
-
-  defp decode_body(body, _encoding), do: body
 
   defp get_header(headers, name) do
     case List.keyfind(headers, name, 0) do
