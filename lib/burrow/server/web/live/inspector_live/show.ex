@@ -88,7 +88,9 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
             <div class="meta-grid">
               <div class="meta-item">
                 <span class="meta-label">Started</span>
-                <span class="meta-value"><%= format_datetime(@request.started_at) %></span>
+                <span class="meta-value">
+                  <local-time utc={format_utc(@request.started_at)} format="full"></local-time>
+                </span>
               </div>
               <div class="meta-item">
                 <span class="meta-label">Duration</span>
@@ -394,10 +396,10 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
   defp status_class(status) when status >= 500, do: "status status-5xx"
   defp status_class(_), do: "status"
 
-  defp format_datetime(nil), do: "-"
+  defp format_utc(nil), do: ""
 
-  defp format_datetime(datetime) do
-    Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S")
+  defp format_utc(datetime) do
+    DateTime.to_iso8601(datetime)
   end
 
   defp format_bytes(nil), do: "-"

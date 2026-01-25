@@ -2,11 +2,10 @@ defmodule Burrow.Server.LandingPage do
   @moduledoc """
   Generates the landing page for Burrow.
 
-  Matches the design aesthetic of error pages with:
-  - Modern, dark-themed design
-  - Tunnel/underground aesthetic
-  - Animated background
-  - GitHub login button
+  Modern, dark-themed design with:
+  - Zinc-based color palette
+  - Perspective grid with animated traversing orbs
+  - Clean typography
   """
 
   import Plug.Conn
@@ -21,9 +20,6 @@ defmodule Burrow.Server.LandingPage do
   end
 
   defp build_html do
-    base_domain = Application.get_env(:burrow, :server, [])[:base_domain] || "localhost"
-    logo_url = "https://#{base_domain}/images/burrow_tunnel_logo.png"
-
     """
     <!DOCTYPE html>
     <html lang="en">
@@ -41,17 +37,18 @@ defmodule Burrow.Server.LandingPage do
         }
 
         :root {
-          --bg-deep: #0a0a0b;
-          --bg-surface: #131316;
-          --bg-elevated: #1a1a1f;
-          --border: #2a2a32;
-          --text-primary: #f0f0f2;
-          --text-secondary: #8b8b96;
-          --text-muted: #5c5c66;
-          --accent: #7c5cff;
-          --accent-hover: #6a4de6;
-          --accent-glow: rgba(124, 92, 255, 0.4);
-          --tunnel-ring: #1f1f24;
+          --bg-deep: #09090b;
+          --bg-surface: #18181b;
+          --bg-elevated: #27272a;
+          --border: #3f3f46;
+          --border-subtle: #27272a;
+          --text-primary: #fafafa;
+          --text-secondary: #a1a1aa;
+          --text-muted: #71717a;
+          --accent: #a1a1aa;
+          --accent-hover: #d4d4d8;
+          --grid-line: rgba(80, 80, 90, 0.6);
+          --orb-glow: rgba(161, 161, 170, 0.6);
         }
 
         html, body {
@@ -77,96 +74,94 @@ defmodule Burrow.Server.LandingPage do
           position: relative;
         }
 
-        /* Animated background tunnel effect */
-        .tunnel-bg {
+        /* Perspective grid background */
+        .grid-bg {
           position: fixed;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 140vh;
+          margin: 0 -150%;
+          width: 400%;
           pointer-events: none;
           z-index: 0;
+          overflow: hidden;
+          transform: perspective(400px) rotateX(45deg);
+          transform-origin: center bottom;
         }
 
-        .tunnel-ring {
+        .grid-plane {
           position: absolute;
-          border: 1px solid var(--tunnel-ring);
-          border-radius: 50%;
-          opacity: 0;
-          animation: tunnel-pulse 4s ease-out infinite;
+          inset: 0;
+          background-image:
+            repeating-linear-gradient(0deg, var(--grid-line), var(--grid-line) 1px, transparent 1px, transparent 40px),
+            repeating-linear-gradient(90deg, var(--grid-line), var(--grid-line) 1px, transparent 1px, transparent 40px);
         }
 
-        .tunnel-ring:nth-child(1) { width: 200px; height: 200px; animation-delay: 0s; }
-        .tunnel-ring:nth-child(2) { width: 350px; height: 350px; animation-delay: 0.5s; }
-        .tunnel-ring:nth-child(3) { width: 500px; height: 500px; animation-delay: 1s; }
-        .tunnel-ring:nth-child(4) { width: 650px; height: 650px; animation-delay: 1.5s; }
-        .tunnel-ring:nth-child(5) { width: 800px; height: 800px; animation-delay: 2s; }
-        .tunnel-ring:nth-child(6) { width: 950px; height: 950px; animation-delay: 2.5s; }
+        .grid-bg::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 40%;
+          background: linear-gradient(to bottom, var(--bg-deep) 0%, transparent 100%);
+          pointer-events: none;
+        }
 
-        @keyframes tunnel-pulse {
-          0% {
-            opacity: 0.5;
-            transform: scale(0.8);
-          }
-          100% {
-            opacity: 0;
-            transform: scale(1.2);
-          }
+        /* Orb canvas layers - flat, projection done in JS */
+        .orb-canvas {
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+        }
+
+        #canvas-bottom {
+          z-index: 1;
+        }
+
+        #canvas-top {
+          z-index: 2;
+          opacity: 0.7;
         }
 
         /* Main content */
         .container {
           position: relative;
           z-index: 1;
-          max-width: 480px;
+          max-width: 520px;
           width: 100%;
           text-align: center;
-        }
-
-        /* Logo */
-        .logo {
-          margin-bottom: 0;
-          animation: fade-in 0.6s ease-out;
-        }
-
-        .logo img {
-          width: 400px;
-          height: 400px;
-          object-fit: contain;
-          filter: drop-shadow(0 0 40px var(--accent-glow));
         }
 
         /* Brand name */
         .brand {
           font-family: 'JetBrains Mono', monospace;
-          font-size: 3rem;
+          font-size: 4rem;
           font-weight: 600;
-          letter-spacing: -0.02em;
-          background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          margin-bottom: 0.5rem;
-          animation: fade-in 0.6s ease-out 0.1s backwards;
+          letter-spacing: -0.03em;
+          color: var(--text-primary);
+          margin-bottom: 1rem;
+          animation: fade-in 0.8s ease-out;
         }
 
         /* Tagline */
         .tagline {
-          font-size: 1.125rem;
+          font-size: 1.25rem;
           font-weight: 400;
           color: var(--text-secondary);
           line-height: 1.6;
-          margin-bottom: 1.5rem;
-          animation: fade-in 0.6s ease-out 0.2s backwards;
+          margin-bottom: 2.5rem;
+          animation: fade-in 0.8s ease-out 0.15s backwards;
         }
 
         /* Features */
         .features {
           display: flex;
           justify-content: center;
-          gap: 2rem;
-          margin-bottom: 1.5rem;
-          animation: fade-in 0.6s ease-out 0.3s backwards;
+          gap: 2.5rem;
+          margin-bottom: 2.5rem;
+          animation: fade-in 0.8s ease-out 0.3s backwards;
         }
 
         .feature {
@@ -175,75 +170,92 @@ defmodule Burrow.Server.LandingPage do
           gap: 0.5rem;
           font-size: 0.875rem;
           color: var(--text-muted);
+          transition: color 0.2s ease;
+        }
+
+        .feature:hover {
+          color: var(--text-secondary);
         }
 
         .feature svg {
           width: 16px;
           height: 16px;
-          color: var(--accent);
+          stroke: currentColor;
         }
 
-        /* Login button */
+        /* Login button - Liquid Glass */
         .login-btn {
           display: inline-flex;
           align-items: center;
           justify-content: center;
           gap: 0.75rem;
-          background: var(--bg-surface);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 1rem 2rem;
+          padding: 0.875rem 2rem;
           font-family: 'Outfit', sans-serif;
-          font-size: 1rem;
+          font-size: 0.9375rem;
           font-weight: 500;
-          color: var(--text-primary);
+          color: white;
           text-decoration: none;
           cursor: pointer;
-          transition: all 0.2s ease;
-          animation: fade-in 0.6s ease-out 0.4s backwards;
+          animation: fade-in 0.8s ease-out 0.45s backwards;
+
+          background: rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          mix-blend-mode: difference;
+
+          border: 1px solid rgba(255, 255, 255, 0.4);
+          border-radius: 2rem;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+
+          transition: all 0.25s ease;
         }
 
         .login-btn:hover {
-          background: var(--bg-elevated);
-          border-color: var(--accent);
-          box-shadow: 0 0 20px var(--accent-glow);
+          background: rgba(255, 255, 255, 0.15);
+          border-color: rgba(255, 255, 255, 0.5);
           transform: translateY(-2px);
+          box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .login-btn:active {
+          transform: translateY(0);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
         .login-btn svg {
-          width: 20px;
-          height: 20px;
+          width: 18px;
+          height: 18px;
         }
 
         /* Footer */
         .footer {
-          margin-top: 2rem;
-          animation: fade-in 0.6s ease-out 0.5s backwards;
+          margin-top: 3rem;
+          animation: fade-in 0.8s ease-out 0.6s backwards;
         }
 
         .footer a {
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
-          font-size: 0.875rem;
+          font-size: 0.8125rem;
           color: var(--text-muted);
           text-decoration: none;
           transition: color 0.2s ease;
         }
 
         .footer a:hover {
-          color: var(--accent);
+          color: var(--text-secondary);
         }
 
         .footer svg {
-          width: 16px;
-          height: 16px;
+          width: 15px;
+          height: 15px;
         }
 
         @keyframes fade-in {
           from {
             opacity: 0;
-            transform: translateY(10px);
+            transform: translateY(12px);
           }
           to {
             opacity: 1;
@@ -253,58 +265,45 @@ defmodule Burrow.Server.LandingPage do
 
         /* Responsive */
         @media (max-width: 480px) {
-          .logo img {
-            width: 160px;
-            height: 160px;
-          }
-
           .brand {
-            font-size: 1.75rem;
-            margin-bottom: 0.25rem;
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
           }
 
           .tagline {
-            font-size: 0.85rem;
-            margin-bottom: 1rem;
+            font-size: 1rem;
+            margin-bottom: 2rem;
           }
 
           .features {
-            gap: 1rem;
-            margin-bottom: 1rem;
+            gap: 1.25rem;
+            margin-bottom: 2rem;
           }
 
           .feature {
-            font-size: 0.75rem;
+            font-size: 0.8125rem;
           }
 
           .login-btn {
             padding: 0.75rem 1.5rem;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
           }
 
           .footer {
-            margin-top: 1.5rem;
+            margin-top: 2rem;
           }
         }
       </style>
     </head>
     <body>
-      <!-- Animated tunnel background -->
-      <div class="tunnel-bg">
-        <div class="tunnel-ring"></div>
-        <div class="tunnel-ring"></div>
-        <div class="tunnel-ring"></div>
-        <div class="tunnel-ring"></div>
-        <div class="tunnel-ring"></div>
-        <div class="tunnel-ring"></div>
+      <!-- Perspective grid background with orbs -->
+      <canvas id="canvas-bottom" class="orb-canvas"></canvas>
+      <div class="grid-bg">
+        <div class="grid-plane"></div>
       </div>
+      <canvas id="canvas-top" class="orb-canvas"></canvas>
 
       <div class="container">
-        <!-- Logo -->
-        <div class="logo">
-          <img src="#{logo_url}" alt="Burrow" />
-        </div>
-
         <!-- Brand -->
         <h1 class="brand">burrow</h1>
 
@@ -314,20 +313,20 @@ defmodule Burrow.Server.LandingPage do
         <!-- Features -->
         <div class="features">
           <div class="feature">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
             Secure
           </div>
           <div class="feature">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
               <circle cx="12" cy="12" r="10"/>
               <polyline points="12 6 12 12 16 14"/>
             </svg>
             Fast
           </div>
           <div class="feature">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
             </svg>
             Simple
@@ -335,11 +334,12 @@ defmodule Burrow.Server.LandingPage do
         </div>
 
         <!-- Login button -->
-        <a href="/auth/github" class="login-btn">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
+        <a href="/auth/login" class="login-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
-          Sign in with GitHub
+          Sign in
         </a>
 
         <!-- Footer -->
@@ -352,6 +352,178 @@ defmodule Burrow.Server.LandingPage do
           </a>
         </div>
       </div>
+
+      <script>
+      (function(){
+        'use strict';
+
+        var GRID = 40;
+        var DEG = Math.PI / 180;
+        var PERSPECTIVE = 400;
+        var RX = 45 * DEG;
+        var cosX = Math.cos(RX), sinX = Math.sin(RX);
+
+        var opts = {
+          numberOrbs: 250,
+          maxVelocity: 0.8,
+          orbRadius: 2.5,
+          minProximity: 50,
+          maxDepthDiff: 150,
+          turnChance: 0.25,
+          colorFrequency: 0.06,
+          colorAngleIncrement: 0.002,
+          globalAlpha: 0.008,
+          trailFade: 0.035
+        };
+
+        var canvasTop, linecxt, canvasBottom, cxt, viewW, viewH, planeW, planeH, originX, originY, animationFrame;
+        var orbs, colorAngle = 0;
+
+        function project(gx, gy) {
+          var rx = gx - planeW / 2;
+          var ry = planeH - gy;
+          var y2 = ry * cosX;
+          var z2 = ry * sinX;
+          var scale = PERSPECTIVE / (PERSPECTIVE + z2);
+          return { x: rx * scale + originX, y: viewH - y2 * scale, scale: scale };
+        }
+
+        function snapToGrid(val) {
+          return Math.round(val / GRID) * GRID;
+        }
+
+        function Orb(radius) {
+          var gridCols = Math.floor(planeW / GRID);
+          var gridRows = Math.floor(planeH / GRID);
+          this.gx = (Math.floor(Math.random() * gridCols) + 1) * GRID;
+          this.gy = (Math.floor(Math.random() * gridRows) + 1) * GRID;
+          this.radius = radius;
+          this.color = null;
+          this.speed = 0.3 + Math.random() * opts.maxVelocity;
+          this.horizontal = Math.random() < 0.5;
+          this.direction = Math.random() < 0.5 ? 1 : -1;
+          this.lastIntersection = null;
+          this.projected = { x: 0, y: 0, scale: 1 };
+        }
+
+        Orb.prototype.update = function() {
+          if (this.horizontal) {
+            this.gx += this.speed * this.direction;
+            if (this.gx <= 0 || this.gx >= planeW) this.direction *= -1;
+          } else {
+            this.gy += this.speed * this.direction;
+            if (this.gy <= 0 || this.gy >= planeH) this.direction *= -1;
+          }
+
+          var onGridX = Math.abs(this.gx - snapToGrid(this.gx)) < this.speed + 0.5;
+          var onGridY = Math.abs(this.gy - snapToGrid(this.gy)) < this.speed + 0.5;
+
+          if (onGridX && onGridY) {
+            var ix = snapToGrid(this.gx);
+            var iy = snapToGrid(this.gy);
+            var intersectionKey = ix + ',' + iy;
+
+            if (this.lastIntersection !== intersectionKey && Math.random() < opts.turnChance) {
+              this.gx = ix;
+              this.gy = iy;
+              this.horizontal = !this.horizontal;
+              this.lastIntersection = intersectionKey;
+            }
+          }
+
+          this.projected = project(this.gx, this.gy);
+        };
+
+        Orb.prototype.display = function() {
+          var p = this.projected;
+          if (p.scale <= 0) return;
+          cxt.beginPath();
+          cxt.fillStyle = this.color;
+          cxt.arc(p.x, p.y, this.radius * p.scale, 0, 2 * Math.PI);
+          cxt.fill();
+        };
+
+        function phaseColor() {
+          var r = 140 + Math.floor(Math.sin(opts.colorFrequency * colorAngle) * 20);
+          var g = 70 + Math.floor(Math.sin(opts.colorFrequency * colorAngle) * 15);
+          var b = 70 + Math.floor(Math.sin(opts.colorFrequency * colorAngle) * 15);
+          colorAngle += opts.colorAngleIncrement;
+          return 'rgba(' + r + ', ' + g + ', ' + b + ', 1)';
+        }
+
+        function initialize() {
+          canvasTop = document.querySelector('#canvas-top');
+          canvasBottom = document.querySelector('#canvas-bottom');
+          if (!canvasTop || !canvasBottom) return;
+          linecxt = canvasTop.getContext('2d');
+          cxt = canvasBottom.getContext('2d');
+          window.addEventListener('resize', resize, false);
+          resize();
+        }
+
+        function resize() {
+          viewW = window.innerWidth;
+          viewH = window.innerHeight;
+          planeW = viewW * 4;
+          planeH = viewH * 2.5;
+          originX = viewW * 0.5;
+          originY = viewH;
+          setup();
+        }
+
+        function setup() {
+          canvasTop.width = viewW;
+          canvasTop.height = viewH;
+          canvasBottom.width = viewW;
+          canvasBottom.height = viewH;
+          orbs = [];
+          for (var i = 0; i < opts.numberOrbs; i++) {
+            orbs.push(new Orb(opts.orbRadius));
+          }
+          if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+          draw();
+        }
+
+        function draw() {
+          cxt.clearRect(0, 0, viewW, viewH);
+
+          // Fade trail canvas gradually
+          linecxt.globalCompositeOperation = 'destination-out';
+          linecxt.fillStyle = 'rgba(0, 0, 0, ' + opts.trailFade + ')';
+          linecxt.fillRect(0, 0, viewW, viewH);
+          linecxt.globalCompositeOperation = 'source-over';
+
+          var color = phaseColor();
+
+          for (var i = 0; i < orbs.length; i++) {
+            orbs[i].color = color;
+            orbs[i].update();
+            orbs[i].display();
+
+            for (var j = i + 1; j < orbs.length; j++) {
+              var oi = orbs[i], oj = orbs[j];
+              var depthDiff = Math.abs(oi.gy - oj.gy);
+              if (depthDiff > opts.maxDepthDiff) continue;
+
+              var pi = oi.projected, pj = oj.projected;
+              var dx = pi.x - pj.x, dy = pi.y - pj.y;
+              var d = Math.sqrt(dx * dx + dy * dy);
+              if (d <= opts.minProximity) {
+                linecxt.beginPath();
+                linecxt.strokeStyle = color;
+                linecxt.globalAlpha = opts.globalAlpha;
+                linecxt.moveTo(pi.x, pi.y);
+                linecxt.lineTo(pj.x, pj.y);
+                linecxt.stroke();
+              }
+            }
+          }
+          animationFrame = requestAnimationFrame(draw);
+        }
+
+        initialize();
+      })();
+      </script>
     </body>
     </html>
     """

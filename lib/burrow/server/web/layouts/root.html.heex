@@ -15,19 +15,19 @@
       }
 
       :root {
-        --bg-deep: #0a0a0b;
-        --bg-surface: #131316;
-        --bg-elevated: #1a1a1f;
-        --bg-hover: #222228;
-        --border: #2a2a32;
-        --border-subtle: #1f1f24;
-        --text-primary: #f0f0f2;
-        --text-secondary: #8b8b96;
-        --text-muted: #5c5c66;
-        --accent: #7c5cff;
-        --accent-hover: #6a4de6;
-        --accent-glow: rgba(124, 92, 255, 0.4);
-        --accent-subtle: rgba(124, 92, 255, 0.15);
+        --bg-deep: #09090b;
+        --bg-surface: #18181b;
+        --bg-elevated: #27272a;
+        --bg-hover: #3f3f46;
+        --border: #3f3f46;
+        --border-subtle: #27272a;
+        --text-primary: #fafafa;
+        --text-secondary: #a1a1aa;
+        --text-muted: #71717a;
+        --accent: #a1a1aa;
+        --accent-hover: #d4d4d8;
+        --accent-glow: rgba(161, 161, 170, 0.3);
+        --accent-subtle: rgba(161, 161, 170, 0.15);
         --success: #34d399;
         --success-bg: rgba(52, 211, 153, 0.15);
         --warning: #fbbf24;
@@ -36,7 +36,7 @@
         --error-bg: rgba(248, 113, 113, 0.15);
         --info: #60a5fa;
         --info-bg: rgba(96, 165, 250, 0.15);
-        --tunnel-ring: #1f1f24;
+        --grid-line: rgba(80, 80, 90, 0.6);
       }
 
       html, body {
@@ -60,43 +60,50 @@
         overflow-x: hidden;
       }
 
-      /* Animated tunnel background */
-      .tunnel-bg {
+      /* Perspective grid background */
+      .grid-bg {
         position: fixed;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 140vh;
+        margin: 0 -150%;
+        width: 400%;
         pointer-events: none;
         z-index: 0;
-        opacity: 0.5;
+        overflow: hidden;
+        transform: perspective(400px) rotateX(45deg);
+        transform-origin: center bottom;
       }
 
-      .tunnel-ring {
+      .grid-plane {
         position: absolute;
-        border: 1px solid var(--tunnel-ring);
-        border-radius: 50%;
-        opacity: 0;
-        animation: tunnel-pulse 6s ease-out infinite;
+        inset: 0;
+        background-image:
+          repeating-linear-gradient(0deg, var(--grid-line), var(--grid-line) 1px, transparent 1px, transparent 40px),
+          repeating-linear-gradient(90deg, var(--grid-line), var(--grid-line) 1px, transparent 1px, transparent 40px);
       }
 
-      .tunnel-ring:nth-child(1) { width: 300px; height: 300px; animation-delay: 0s; }
-      .tunnel-ring:nth-child(2) { width: 500px; height: 500px; animation-delay: 0.8s; }
-      .tunnel-ring:nth-child(3) { width: 700px; height: 700px; animation-delay: 1.6s; }
-      .tunnel-ring:nth-child(4) { width: 900px; height: 900px; animation-delay: 2.4s; }
-      .tunnel-ring:nth-child(5) { width: 1100px; height: 1100px; animation-delay: 3.2s; }
-      .tunnel-ring:nth-child(6) { width: 1300px; height: 1300px; animation-delay: 4s; }
-
-      @keyframes tunnel-pulse {
-        0% {
-          opacity: 0.3;
-          transform: scale(0.9);
-        }
-        100% {
-          opacity: 0;
-          transform: scale(1.1);
-        }
+      .grid-bg::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 40%;
+        background: linear-gradient(to bottom, var(--bg-deep) 0%, transparent 100%);
+        pointer-events: none;
       }
+
+      /* Orb canvas layers - flat, projection done in JS */
+      .orb-canvas {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      #canvas-bottom { z-index: 1; }
+      #canvas-top { z-index: 2; opacity: 0.6; }
 
       /* Layout */
       .app-container {
@@ -134,7 +141,12 @@
         width: 36px;
         height: 36px;
         object-fit: contain;
-        filter: drop-shadow(0 0 8px var(--accent-glow));
+        filter: drop-shadow(2px 4px 8px rgba(0, 0, 0, 0.3));
+        transition: filter 0.2s ease;
+      }
+
+      .header-brand:hover .header-logo {
+        filter: drop-shadow(2px 6px 12px rgba(0, 0, 0, 0.4));
       }
 
       .header-title {
@@ -162,37 +174,6 @@
         font-weight: 400;
       }
 
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
-        padding: 0.25rem 0.625rem;
-        border-radius: 9999px;
-        font-size: 0.7rem;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
-      .badge-live {
-        background: var(--success-bg);
-        color: var(--success);
-      }
-
-      .badge-live::before {
-        content: '';
-        width: 6px;
-        height: 6px;
-        background: var(--success);
-        border-radius: 50%;
-        animation: pulse-dot 2s ease-in-out infinite;
-      }
-
-      @keyframes pulse-dot {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.5; transform: scale(0.8); }
-      }
-
       .container {
         max-width: 1400px;
         margin: 0 auto;
@@ -204,46 +185,59 @@
         width: 100%;
       }
 
-      /* Buttons */
+      /* Buttons - Liquid Glass */
       .btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
         padding: 0.5rem 1rem;
-        border: 1px solid var(--border);
-        background: var(--bg-surface);
-        color: var(--text-primary);
-        border-radius: 8px;
+        color: white;
+        border-radius: 1.5rem;
         cursor: pointer;
         font-family: 'Outfit', sans-serif;
         font-size: 0.875rem;
         font-weight: 500;
-        transition: all 0.15s ease;
         text-decoration: none;
+
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        mix-blend-mode: difference;
+
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+
+        transition: all 0.25s ease;
       }
 
       .btn:hover {
-        background: var(--bg-elevated);
-        border-color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
         text-decoration: none;
       }
 
+      .btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      }
+
       .btn-primary {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: white;
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.5);
       }
 
       .btn-primary:hover {
-        background: var(--accent-hover);
-        border-color: var(--accent-hover);
-        box-shadow: 0 0 20px var(--accent-glow);
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.6);
       }
 
       .btn-sm {
         padding: 0.25rem 0.5rem;
         font-size: 0.75rem;
+        border-radius: 1rem;
       }
 
       /* Forms */
@@ -440,6 +434,22 @@
         font-size: 1rem;
       }
 
+      /* Prevent FOUC */
+      local-time:not(:defined) {
+        visibility: hidden;
+      }
+
+      .phx-connected .inspector-index,
+      .phx-connected .request-show {
+        opacity: 1;
+      }
+
+      .inspector-index,
+      .request-show {
+        opacity: 0;
+        transition: opacity 0.1s ease;
+      }
+
       /* Links */
       a {
         color: var(--accent);
@@ -495,10 +505,217 @@
     <script defer src="https://cdn.jsdelivr.net/npm/phoenix@1.7.21/priv/static/phoenix.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/phoenix_live_view@1.1.19/priv/static/phoenix_live_view.min.js"></script>
     <script>
+      const Hooks = {};
+
+      // Web component for local time formatting
+      class LocalTime extends HTMLElement {
+        connectedCallback() {
+          this.render();
+        }
+
+        static get observedAttributes() {
+          return ['utc', 'format'];
+        }
+
+        attributeChangedCallback() {
+          this.render();
+        }
+
+        render() {
+          const utc = this.getAttribute('utc');
+          if (!utc) return;
+
+          const date = new Date(utc);
+          const format = this.getAttribute('format');
+
+          const timeStr = date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+
+          if (format === 'full') {
+            const dateStr = date.toLocaleDateString([], {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric'
+            });
+            this.textContent = `${dateStr} ${timeStr}`;
+          } else {
+            const today = new Date();
+            const isToday = date.toDateString() === today.toDateString();
+
+            if (isToday) {
+              this.textContent = timeStr;
+            } else {
+              const dateStr = date.toLocaleDateString([], {
+                month: 'short',
+                day: 'numeric'
+              });
+              this.textContent = `${dateStr} ${timeStr}`;
+            }
+          }
+        }
+      }
+      customElements.define('local-time', LocalTime);
+
+      Hooks.InfiniteScroll = {
+        mounted() {
+          this.pending = false;
+          this.observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting && !this.pending) {
+                this.pending = true;
+                const event = this.el.dataset.event;
+                if (event) {
+                  this.pushEvent(event, {}, () => {
+                    this.pending = false;
+                  });
+                }
+              }
+            });
+          }, {
+            root: this.el.closest('.table-scroll'),
+            rootMargin: '200px',
+            threshold: 0
+          });
+          this.observer.observe(this.el);
+        },
+        updated() {
+          this.pending = false;
+        },
+        destroyed() {
+          if (this.observer) {
+            this.observer.disconnect();
+          }
+        }
+      };
+
+      // WebAuthn hooks for passkey authentication
+      Hooks.WebAuthn = {
+        mounted() {
+          // Handle registration requests from server
+          this.handleEvent("webauthn:register", async ({ options }) => {
+            try {
+              // Convert base64url to ArrayBuffer
+              options.challenge = base64UrlToBuffer(options.challenge);
+              options.user.id = base64UrlToBuffer(options.user.id);
+              if (options.excludeCredentials) {
+                options.excludeCredentials = options.excludeCredentials.map(cred => ({
+                  ...cred,
+                  id: base64UrlToBuffer(cred.id)
+                }));
+              }
+
+              const credential = await navigator.credentials.create({ publicKey: options });
+
+              const response = {
+                id: bufferToBase64Url(credential.rawId),
+                type: credential.type,
+                clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                attestationObject: bufferToBase64Url(credential.response.attestationObject)
+              };
+
+              this.pushEvent("webauthn_response", { response });
+            } catch (error) {
+              console.error("WebAuthn registration error:", error);
+              this.pushEvent("webauthn_error", { error: error.message || "Registration failed" });
+            }
+          });
+
+          // Handle authentication requests from server
+          this.handleEvent("webauthn:authenticate", async ({ options }) => {
+            try {
+              options.challenge = base64UrlToBuffer(options.challenge);
+              if (options.allowCredentials) {
+                options.allowCredentials = options.allowCredentials.map(cred => ({
+                  ...cred,
+                  id: base64UrlToBuffer(cred.id)
+                }));
+              }
+
+              const credential = await navigator.credentials.get({ publicKey: options });
+
+              const response = {
+                id: bufferToBase64Url(credential.rawId),
+                type: credential.type,
+                clientDataJSON: bufferToBase64Url(credential.response.clientDataJSON),
+                authenticatorData: bufferToBase64Url(credential.response.authenticatorData),
+                signature: bufferToBase64Url(credential.response.signature),
+                userHandle: credential.response.userHandle
+                  ? bufferToBase64Url(credential.response.userHandle)
+                  : null
+              };
+
+              this.pushEvent("webauthn_response", { response });
+            } catch (error) {
+              console.error("WebAuthn authentication error:", error);
+              this.pushEvent("webauthn_error", { error: error.message || "Authentication failed" });
+            }
+          });
+
+          // Handle session creation after successful WebAuthn
+          this.handleEvent("session:create", async ({ user_id }) => {
+            try {
+              const csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content");
+              const response = await fetch("/auth/session", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-csrf-token": csrfToken
+                },
+                body: JSON.stringify({ user_id })
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+                if (data.redirect) {
+                  window.location.href = data.redirect;
+                }
+              }
+            } catch (error) {
+              console.error("Session creation error:", error);
+            }
+          });
+        }
+      };
+
+      // Helper functions for base64url encoding/decoding
+      function base64UrlToBuffer(base64url) {
+        const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+        const padding = '='.repeat((4 - base64.length % 4) % 4);
+        const binary = atob(base64 + padding);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes.buffer;
+      }
+
+      function bufferToBase64Url(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      }
+
       document.addEventListener("DOMContentLoaded", () => {
         let csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content");
         let liveSocket = new window.LiveView.LiveSocket("/live", window.Phoenix.Socket, {
-          params: { _csrf_token: csrfToken }
+          params: { _csrf_token: csrfToken },
+          hooks: Hooks,
+          dom: {
+            onBeforeElUpdated(from, to) {
+              // Preserve WebAuthn hook on LiveView updates
+              if (from._lv_hook) {
+                to._lv_hook = from._lv_hook;
+              }
+              return true;
+            }
+          }
         });
         liveSocket.connect();
         window.liveSocket = liveSocket;
@@ -507,15 +724,12 @@
     <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
   </head>
   <body>
-    <!-- Animated tunnel background -->
-    <div class="tunnel-bg">
-      <div class="tunnel-ring"></div>
-      <div class="tunnel-ring"></div>
-      <div class="tunnel-ring"></div>
-      <div class="tunnel-ring"></div>
-      <div class="tunnel-ring"></div>
-      <div class="tunnel-ring"></div>
+    <!-- Perspective grid background with orbs -->
+    <canvas id="canvas-bottom" class="orb-canvas"></canvas>
+    <div class="grid-bg">
+      <div class="grid-plane"></div>
     </div>
+    <canvas id="canvas-top" class="orb-canvas"></canvas>
 
     <div class="app-container">
       <header>
@@ -527,11 +741,182 @@
             <span class="page">inspector</span>
           </div>
         </a>
-        <span class="badge badge-live">Live</span>
       </header>
       <div class="container">
         <%= @inner_content %>
       </div>
     </div>
+
+    <script>
+    (function(){
+      'use strict';
+
+      var GRID = 40;
+      var DEG = Math.PI / 180;
+      var PERSPECTIVE = 400;
+      var RX = 45 * DEG;
+      var cosX = Math.cos(RX), sinX = Math.sin(RX);
+
+      var opts = {
+        numberOrbs: 250,
+        maxVelocity: 0.8,
+        orbRadius: 2.5,
+        minProximity: 50,
+        maxDepthDiff: 150,
+        turnChance: 0.25,
+        colorFrequency: 0.06,
+        colorAngleIncrement: 0.002,
+        globalAlpha: 0.008,
+        trailFade: 0.035
+      };
+
+      var canvasTop, linecxt, canvasBottom, cxt, viewW, viewH, planeW, planeH, originX, originY, animationFrame;
+      var orbs, colorAngle = 0;
+
+      function project(gx, gy) {
+        var rx = gx - planeW / 2;
+        var ry = planeH - gy;
+        var y2 = ry * cosX;
+        var z2 = ry * sinX;
+        var scale = PERSPECTIVE / (PERSPECTIVE + z2);
+        return { x: rx * scale + originX, y: viewH - y2 * scale, scale: scale };
+      }
+
+      function snapToGrid(val) {
+        return Math.round(val / GRID) * GRID;
+      }
+
+      function Orb(radius) {
+        var gridCols = Math.floor(planeW / GRID);
+        var gridRows = Math.floor(planeH / GRID);
+        this.gx = (Math.floor(Math.random() * gridCols) + 1) * GRID;
+        this.gy = (Math.floor(Math.random() * gridRows) + 1) * GRID;
+        this.radius = radius;
+        this.color = null;
+        this.speed = 0.3 + Math.random() * opts.maxVelocity;
+        this.horizontal = Math.random() < 0.5;
+        this.direction = Math.random() < 0.5 ? 1 : -1;
+        this.lastIntersection = null;
+        this.projected = { x: 0, y: 0, scale: 1 };
+      }
+
+      Orb.prototype.update = function() {
+        if (this.horizontal) {
+          this.gx += this.speed * this.direction;
+          if (this.gx <= 0 || this.gx >= planeW) this.direction *= -1;
+        } else {
+          this.gy += this.speed * this.direction;
+          if (this.gy <= 0 || this.gy >= planeH) this.direction *= -1;
+        }
+
+        var onGridX = Math.abs(this.gx - snapToGrid(this.gx)) < this.speed + 0.5;
+        var onGridY = Math.abs(this.gy - snapToGrid(this.gy)) < this.speed + 0.5;
+
+        if (onGridX && onGridY) {
+          var ix = snapToGrid(this.gx);
+          var iy = snapToGrid(this.gy);
+          var intersectionKey = ix + ',' + iy;
+
+          if (this.lastIntersection !== intersectionKey && Math.random() < opts.turnChance) {
+            this.gx = ix;
+            this.gy = iy;
+            this.horizontal = !this.horizontal;
+            this.lastIntersection = intersectionKey;
+          }
+        }
+
+        this.projected = project(this.gx, this.gy);
+      };
+
+      Orb.prototype.display = function() {
+        var p = this.projected;
+        if (p.scale <= 0) return;
+        cxt.beginPath();
+        cxt.fillStyle = this.color;
+        cxt.arc(p.x, p.y, this.radius * p.scale, 0, 2 * Math.PI);
+        cxt.fill();
+      };
+
+      function phaseColor() {
+        var r = 140 + Math.floor(Math.sin(opts.colorFrequency * colorAngle) * 20);
+        var g = 70 + Math.floor(Math.sin(opts.colorFrequency * colorAngle) * 15);
+        var b = 70 + Math.floor(Math.sin(opts.colorFrequency * colorAngle) * 15);
+        colorAngle += opts.colorAngleIncrement;
+        return 'rgba(' + r + ', ' + g + ', ' + b + ', 1)';
+      }
+
+      function initialize() {
+        canvasTop = document.querySelector('#canvas-top');
+        canvasBottom = document.querySelector('#canvas-bottom');
+        if (!canvasTop || !canvasBottom) return;
+        linecxt = canvasTop.getContext('2d');
+        cxt = canvasBottom.getContext('2d');
+        window.addEventListener('resize', resize, false);
+        resize();
+      }
+
+      function resize() {
+        viewW = window.innerWidth;
+        viewH = window.innerHeight;
+        planeW = viewW * 4;
+        planeH = viewH * 2.5;
+        originX = viewW * 0.5;
+        originY = viewH;
+        setup();
+      }
+
+      function setup() {
+        canvasTop.width = viewW;
+        canvasTop.height = viewH;
+        canvasBottom.width = viewW;
+        canvasBottom.height = viewH;
+        orbs = [];
+        for (var i = 0; i < opts.numberOrbs; i++) {
+          orbs.push(new Orb(opts.orbRadius));
+        }
+        if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+        draw();
+      }
+
+      function draw() {
+        cxt.clearRect(0, 0, viewW, viewH);
+
+        // Fade trail canvas gradually
+        linecxt.globalCompositeOperation = 'destination-out';
+        linecxt.fillStyle = 'rgba(0, 0, 0, ' + opts.trailFade + ')';
+        linecxt.fillRect(0, 0, viewW, viewH);
+        linecxt.globalCompositeOperation = 'source-over';
+
+        var color = phaseColor();
+
+        for (var i = 0; i < orbs.length; i++) {
+          orbs[i].color = color;
+          orbs[i].update();
+          orbs[i].display();
+
+          for (var j = i + 1; j < orbs.length; j++) {
+            var oi = orbs[i], oj = orbs[j];
+            var depthDiff = Math.abs(oi.gy - oj.gy);
+            if (depthDiff > opts.maxDepthDiff) continue;
+
+            var pi = oi.projected, pj = oj.projected;
+            var dx = pi.x - pj.x, dy = pi.y - pj.y;
+            var d = Math.sqrt(dx * dx + dy * dy);
+            if (d <= opts.minProximity) {
+              linecxt.beginPath();
+              linecxt.strokeStyle = color;
+              linecxt.globalAlpha = opts.globalAlpha;
+              linecxt.moveTo(pi.x, pi.y);
+              linecxt.lineTo(pj.x, pj.y);
+              linecxt.stroke();
+            }
+          }
+        }
+        animationFrame = requestAnimationFrame(draw);
+      }
+
+      initialize();
+    })();
+    </script>
   </body>
 </html>
