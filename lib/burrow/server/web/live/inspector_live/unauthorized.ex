@@ -25,7 +25,7 @@ defmodule Burrow.Server.Web.InspectorLive.Unauthorized do
         <h1 class="unauthorized-title">Access Denied</h1>
 
         <p class="unauthorized-description">
-          You don't have permission to access the request inspector. Access is restricted to authorized GitHub users and organization members.
+          You don't have permission to access the request inspector. Access is restricted to authorized users.
         </p>
 
         <p class="unauthorized-hint">
@@ -41,7 +41,7 @@ defmodule Burrow.Server.Web.InspectorLive.Unauthorized do
             </svg>
             Sign Out
           </a>
-          <a href="/inspector/login" class="btn btn-primary">
+          <a href="/auth/login" class="btn btn-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
