@@ -6,6 +6,10 @@
 app = 'burrow'
 primary_region = 'ewr'
 
+[env]
+  DNS_CLUSTER_QUERY = "burrow.internal"
+  FLY_APP_NAME = "burrow"
+
 [build]
 
 [http_service]

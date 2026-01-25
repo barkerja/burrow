@@ -8,9 +8,14 @@ defmodule Burrow.MixProject do
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      releases: releases()
+      releases: releases(),
+      elixirc_paths: elixirc_paths(Mix.env()),
+      ecto_repos: [Burrow.Repo]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp releases do
     [
@@ -44,11 +49,17 @@ defmodule Burrow.MixProject do
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_html, "~> 4.2"},
       {:phoenix_pubsub, "~> 2.1"},
-      # GitHub OAuth for inspector auth
-      {:ueberauth, "~> 0.10"},
-      {:ueberauth_github, "~> 0.8"},
+      # WebAuthn authentication
+      {:wax_, "~> 0.7.0"},
       # Distributed Erlang clustering
-      {:libcluster, "~> 3.4"}
+      {:dns_cluster, "~> 0.2.0"},
+      # DB
+      {:ecto_sql, "~> 3.11"},
+      {:postgrex, "~> 0.18"},
+      {:castore, "~> 1.0"},
+      # Background jobs
+      {:oban, "~> 2.20"},
+      {:oban_web, "~> 2.11"}
     ]
   end
 end

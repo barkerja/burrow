@@ -56,79 +56,86 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
 
   @impl true
   def handle_event("copy_curl", _params, socket) do
-    # JavaScript will handle the actual copying
     {:noreply, socket}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
-      <.link navigate={"/inspector"} class="btn" style="margin-bottom: 1rem; flex-shrink: 0;">
-        &larr; Back to requests
+    <div class="request-show">
+      <.link navigate="/inspector" class="back-link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+          <line x1="19" y1="12" x2="5" y2="12"/>
+          <polyline points="12 19 5 12 12 5"/>
+        </svg>
+        Back to requests
       </.link>
 
       <%= if @request do %>
-        <div class="panel" style="margin-bottom: 1rem; flex-shrink: 0;">
+        <div class="request-header panel">
           <div class="panel-header">
-            <span>
+            <div class="request-summary">
               <span class={"method method-#{String.downcase(@request.method)}"}><%= @request.method %></span>
-              <%= @request.subdomain %>.<%= get_base_domain() %><%= @request.path %>
-            </span>
+              <span class="request-url">
+                <span class="subdomain"><%= @request.subdomain %></span>.<%= get_base_domain() %><%= @request.path %>
+              </span>
+            </div>
             <span class={status_class(@request.status)}>
               <%= @request.status || "Pending" %>
             </span>
           </div>
           <div class="panel-body">
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
-              <div>
-                <strong style="color: var(--text-muted);">Started</strong><br/>
-                <%= format_datetime(@request.started_at) %>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <span class="meta-label">Started</span>
+                <span class="meta-value"><%= format_datetime(@request.started_at) %></span>
               </div>
-              <div>
-                <strong style="color: var(--text-muted);">Duration</strong><br/>
-                <%= if @request.duration_ms, do: "#{@request.duration_ms}ms", else: "pending..." %>
+              <div class="meta-item">
+                <span class="meta-label">Duration</span>
+                <span class="meta-value"><%= if @request.duration_ms, do: "#{@request.duration_ms}ms", else: "pending..." %></span>
               </div>
-              <div>
-                <strong style="color: var(--text-muted);">Request Size</strong><br/>
-                <%= format_bytes(@request.request_size) %>
+              <div class="meta-item">
+                <span class="meta-label">Request Size</span>
+                <span class="meta-value"><%= format_bytes(@request.request_size) %></span>
               </div>
-              <div>
-                <strong style="color: var(--text-muted);">Response Size</strong><br/>
-                <%= format_bytes(@request.response_size) %>
+              <div class="meta-item">
+                <span class="meta-label">Response Size</span>
+                <span class="meta-value"><%= format_bytes(@request.response_size) %></span>
               </div>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem;">
-              <div>
-                <strong style="color: var(--text-muted);">Client IP</strong><br/>
-                <%= @request.client_ip || "-" %>
-                <%= if @request.ip_info && @request.ip_info[:isp] do %>
-                  <br/><span style="font-size: 0.8rem; color: var(--text-muted);"><%= @request.ip_info.isp %></span>
-                <% end %>
+            <div class="meta-grid">
+              <div class="meta-item">
+                <span class="meta-label">Client IP</span>
+                <span class="meta-value">
+                  <%= @request.client_ip || "-" %>
+                  <%= if @request.ip_info && @request.ip_info[:isp] do %>
+                    <span class="meta-secondary"><%= @request.ip_info.isp %></span>
+                  <% end %>
+                </span>
               </div>
-              <div>
-                <strong style="color: var(--text-muted);">Location</strong><br/>
-                <%= format_location(@request.ip_info) %>
+              <div class="meta-item">
+                <span class="meta-label">Location</span>
+                <span class="meta-value"><%= format_location(@request.ip_info) %></span>
               </div>
-              <div>
-                <strong style="color: var(--text-muted);">Content-Type</strong><br/>
-                <span style="font-size: 0.85rem;"><%= @request.content_type || "-" %></span>
+              <div class="meta-item">
+                <span class="meta-label">Content-Type</span>
+                <span class="meta-value mono"><%= @request.content_type || "-" %></span>
               </div>
-              <div>
-                <strong style="color: var(--text-muted);">Response Type</strong><br/>
-                <span style="font-size: 0.85rem;"><%= @request.response_content_type || "-" %></span>
+              <div class="meta-item">
+                <span class="meta-label">Response Type</span>
+                <span class="meta-value mono"><%= @request.response_content_type || "-" %></span>
               </div>
             </div>
             <%= if @request.user_agent do %>
-              <div style="margin-bottom: 0.5rem;">
-                <strong style="color: var(--text-muted);">User-Agent</strong><br/>
-                <span style="font-size: 0.85rem; word-break: break-all;"><%= @request.user_agent %></span>
+              <div class="meta-full">
+                <span class="meta-label">User-Agent</span>
+                <span class="meta-value mono"><%= @request.user_agent %></span>
               </div>
             <% end %>
             <%= if @request.referer do %>
-              <div>
-                <strong style="color: var(--text-muted);">Referer</strong><br/>
-                <span style="font-size: 0.85rem; word-break: break-all;"><%= @request.referer %></span>
+              <div class="meta-full">
+                <span class="meta-label">Referer</span>
+                <span class="meta-value mono"><%= @request.referer %></span>
               </div>
             <% end %>
           </div>
@@ -143,10 +150,10 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
               <div class="panel-body">
                 <div class="code-block">
                   <%= for {name, value} <- @request.headers || [] do %>
-                    <div><strong><%= name %>:</strong> <%= value %></div>
+                    <div class="header-line"><span class="header-name"><%= name %>:</span> <%= value %></div>
                   <% end %>
                   <%= if (@request.headers || []) == [] do %>
-                    <span style="color: var(--text-muted);">No headers</span>
+                    <span class="no-content">No headers</span>
                   <% end %>
                 </div>
               </div>
@@ -161,7 +168,7 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
                   <%= if @request.body && @request.body != "" do %>
                     <pre><%= format_body(@request.body) %></pre>
                   <% else %>
-                    <span style="color: var(--text-muted);">No body</span>
+                    <span class="no-content">No body</span>
                   <% end %>
                 </div>
               </div>
@@ -179,17 +186,17 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
                     <%= for header <- @request.response_headers do %>
                       <%= case header do %>
                         <% [name, value] -> %>
-                          <div><strong><%= name %>:</strong> <%= value %></div>
+                          <div class="header-line"><span class="header-name"><%= name %>:</span> <%= value %></div>
                         <% {name, value} -> %>
-                          <div><strong><%= name %>:</strong> <%= value %></div>
+                          <div class="header-line"><span class="header-name"><%= name %>:</span> <%= value %></div>
                         <% _ -> %>
                       <% end %>
                     <% end %>
                     <%= if @request.response_headers == [] do %>
-                      <span style="color: var(--text-muted);">No headers</span>
+                      <span class="no-content">No headers</span>
                     <% end %>
                   <% else %>
-                    <span style="color: var(--text-muted);">Awaiting response...</span>
+                    <span class="no-content awaiting">Awaiting response...</span>
                   <% end %>
                 </div>
               </div>
@@ -204,7 +211,7 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
                   <%= if @request.response_body && @request.response_body != "" do %>
                     <pre><%= format_body(@request.response_body) %></pre>
                   <% else %>
-                    <span style="color: var(--text-muted);">
+                    <span class="no-content">
                       <%= if @request.status, do: "No body", else: "Awaiting response..." %>
                     </span>
                   <% end %>
@@ -214,15 +221,19 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
           </div>
         </div>
 
-        <div class="panel" style="margin-top: 1rem; flex-shrink: 0;">
+        <div class="panel curl-panel">
           <div class="panel-header">
             <span>cURL Command</span>
-            <button class="btn" onclick={"navigator.clipboard.writeText(document.getElementById('curl-cmd').textContent)"}>
+            <button class="btn btn-sm" onclick={"navigator.clipboard.writeText(document.getElementById('curl-cmd').textContent)"}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
               Copy
             </button>
           </div>
-          <div class="panel-body" style="padding: 0.5rem 1rem;">
-            <div class="code-block" style="max-height: 80px; font-size: 0.75rem;" id="curl-cmd"><%= @curl_command %></div>
+          <div class="panel-body">
+            <div class="code-block curl-block" id="curl-cmd"><%= @curl_command %></div>
           </div>
         </div>
       <% else %>
@@ -235,10 +246,146 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
         </div>
       <% end %>
     </div>
+
+    <style>
+      .request-show {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+        transition: color 0.15s ease;
+      }
+
+      .back-link:hover {
+        color: var(--accent);
+      }
+
+      .request-header {
+        flex-shrink: 0;
+      }
+
+      .request-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .request-url {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        word-break: break-all;
+      }
+
+      .request-url .subdomain {
+        color: var(--accent);
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .meta-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      .meta-value {
+        font-size: 0.9rem;
+        color: var(--text-primary);
+      }
+
+      .meta-value.mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        word-break: break-all;
+      }
+
+      .meta-secondary {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 0.125rem;
+      }
+
+      .meta-full {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .meta-full:last-child {
+        margin-bottom: 0;
+      }
+
+      .header-line {
+        margin-bottom: 0.25rem;
+      }
+
+      .header-name {
+        color: var(--accent);
+      }
+
+      .no-content {
+        color: var(--text-muted);
+        font-style: italic;
+      }
+
+      .no-content.awaiting {
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+
+      .curl-panel {
+        flex-shrink: 0;
+      }
+
+      .curl-block {
+        max-height: 100px;
+        font-size: 0.75rem;
+      }
+
+      @media (max-width: 768px) {
+        .meta-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .request-summary {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.5rem;
+        }
+      }
+    </style>
     """
   end
-
-  # Helper functions
 
   defp status_class(nil), do: "status status-pending"
   defp status_class(status) when status >= 200 and status < 300, do: "status status-2xx"
@@ -274,7 +421,6 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
   end
 
   defp format_body(body) when is_binary(body) do
-    # Try to pretty-print JSON
     case Jason.decode(body) do
       {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
       _ -> body
@@ -293,7 +439,6 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
     base_domain = get_base_domain()
     url = "https://#{request.subdomain}.#{base_domain}#{request.path}"
 
-    # Build header flags
     headers =
       (request.headers || [])
       |> Enum.reject(fn {name, _} ->

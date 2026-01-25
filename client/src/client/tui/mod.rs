@@ -73,7 +73,7 @@ impl App {
         let i = match self.table_state.selected() {
             Some(i) => {
                 if i >= self.requests.len() - 1 {
-                    0
+                    i // Stay at bottom
                 } else {
                     i + 1
                 }
@@ -88,13 +88,7 @@ impl App {
             return;
         }
         let i = match self.table_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.requests.len() - 1
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => i.saturating_sub(1), // Stay at top (saturating_sub prevents underflow)
             None => 0,
         };
         self.table_state.select(Some(i));
@@ -214,22 +208,18 @@ impl Tui {
             // Draw UI
             self.terminal.draw(|f| ui::draw(f, &mut app))?;
 
-            // Handle events with timeout for keyboard polling
-            tokio::select! {
-                // Check for TUI events from connection
-                Some(event) = self.event_rx.recv() => {
-                    app.handle_event(event);
-                }
-                // Poll for keyboard events
-                _ = tokio::time::sleep(Duration::from_millis(50)) => {
-                    if event::poll(Duration::from_millis(0))? {
-                        if let Event::Key(key) = event::read()? {
-                            if key.kind == KeyEventKind::Press {
-                                handle_key(&mut app, key.code);
-                            }
-                        }
+            // Poll keyboard with short timeout, then check for TUI events
+            if event::poll(Duration::from_millis(10))? {
+                if let Event::Key(key) = event::read()? {
+                    if key.kind == KeyEventKind::Press {
+                        handle_key(&mut app, key.code);
                     }
                 }
+            }
+
+            // Process all pending TUI events without blocking
+            while let Ok(event) = self.event_rx.try_recv() {
+                app.handle_event(event);
             }
 
             if app.should_quit {

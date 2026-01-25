@@ -3,44 +3,200 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Burrow Request Inspector</title>
+    <title>Burrow · Request Inspector</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-      :root {
-        --bg: #0f172a;
-        --surface: #1e293b;
-        --surface-hover: #334155;
-        --border: #334155;
-        --text: #f8fafc;
-        --text-muted: #94a3b8;
-        --accent: #3b82f6;
-        --success: #22c55e;
-        --warning: #f59e0b;
-        --error: #ef4444;
-      }
-
-      * {
+      *, *::before, *::after {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
+      }
+
+      :root {
+        --bg-deep: #0a0a0b;
+        --bg-surface: #131316;
+        --bg-elevated: #1a1a1f;
+        --bg-hover: #222228;
+        --border: #2a2a32;
+        --border-subtle: #1f1f24;
+        --text-primary: #f0f0f2;
+        --text-secondary: #8b8b96;
+        --text-muted: #5c5c66;
+        --accent: #7c5cff;
+        --accent-hover: #6a4de6;
+        --accent-glow: rgba(124, 92, 255, 0.4);
+        --accent-subtle: rgba(124, 92, 255, 0.15);
+        --success: #34d399;
+        --success-bg: rgba(52, 211, 153, 0.15);
+        --warning: #fbbf24;
+        --warning-bg: rgba(251, 191, 36, 0.15);
+        --error: #f87171;
+        --error-bg: rgba(248, 113, 113, 0.15);
+        --info: #60a5fa;
+        --info-bg: rgba(96, 165, 250, 0.15);
+        --tunnel-ring: #1f1f24;
       }
 
       html, body {
         height: 100%;
       }
 
+      html {
+        font-size: 16px;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
       body {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        background: var(--bg);
-        color: var(--text);
+        font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+        background: var(--bg-deep);
+        color: var(--text-primary);
         line-height: 1.5;
         display: flex;
         flex-direction: column;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      /* Animated tunnel background */
+      .tunnel-bg {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.5;
+      }
+
+      .tunnel-ring {
+        position: absolute;
+        border: 1px solid var(--tunnel-ring);
+        border-radius: 50%;
+        opacity: 0;
+        animation: tunnel-pulse 6s ease-out infinite;
+      }
+
+      .tunnel-ring:nth-child(1) { width: 300px; height: 300px; animation-delay: 0s; }
+      .tunnel-ring:nth-child(2) { width: 500px; height: 500px; animation-delay: 0.8s; }
+      .tunnel-ring:nth-child(3) { width: 700px; height: 700px; animation-delay: 1.6s; }
+      .tunnel-ring:nth-child(4) { width: 900px; height: 900px; animation-delay: 2.4s; }
+      .tunnel-ring:nth-child(5) { width: 1100px; height: 1100px; animation-delay: 3.2s; }
+      .tunnel-ring:nth-child(6) { width: 1300px; height: 1300px; animation-delay: 4s; }
+
+      @keyframes tunnel-pulse {
+        0% {
+          opacity: 0.3;
+          transform: scale(0.9);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(1.1);
+        }
+      }
+
+      /* Layout */
+      .app-container {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1.5rem;
+        border-bottom: 1px solid var(--border);
+        background: rgba(10, 10, 11, 0.8);
+        backdrop-filter: blur(12px);
+        flex-shrink: 0;
+      }
+
+      .header-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        text-decoration: none;
+        color: var(--text-primary);
+      }
+
+      .header-brand:hover {
+        text-decoration: none;
+      }
+
+      .header-logo {
+        width: 36px;
+        height: 36px;
+        object-fit: contain;
+        filter: drop-shadow(0 0 8px var(--accent-glow));
+      }
+
+      .header-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .header-title .brand {
+        background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .header-title .separator {
+        color: var(--border);
+      }
+
+      .header-title .page {
+        color: var(--text-secondary);
+        font-weight: 400;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.625rem;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .badge-live {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+
+      .badge-live::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        background: var(--success);
+        border-radius: 50%;
+        animation: pulse-dot 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.8); }
       }
 
       .container {
         max-width: 1400px;
         margin: 0 auto;
-        padding: 1rem;
+        padding: 1.5rem;
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -48,72 +204,100 @@
         width: 100%;
       }
 
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
-      }
-
-      header h1 {
-        font-size: 1.25rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      header h1 span {
-        color: var(--accent);
-      }
-
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.125rem 0.5rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 500;
-      }
-
-      .badge-live {
-        background: rgba(34, 197, 94, 0.2);
-        color: var(--success);
-        animation: pulse 2s infinite;
-      }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.6; }
-      }
-
+      /* Buttons */
       .btn {
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 0.5rem;
         padding: 0.5rem 1rem;
         border: 1px solid var(--border);
-        background: var(--surface);
-        color: var(--text);
-        border-radius: 0.375rem;
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        border-radius: 8px;
         cursor: pointer;
+        font-family: 'Outfit', sans-serif;
         font-size: 0.875rem;
-        transition: background 0.15s;
+        font-weight: 500;
+        transition: all 0.15s ease;
+        text-decoration: none;
       }
 
       .btn:hover {
-        background: var(--surface-hover);
+        background: var(--bg-elevated);
+        border-color: var(--text-muted);
+        text-decoration: none;
       }
 
       .btn-primary {
         background: var(--accent);
         border-color: var(--accent);
+        color: white;
       }
 
       .btn-primary:hover {
-        background: #2563eb;
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+        box-shadow: 0 0 20px var(--accent-glow);
+      }
+
+      .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+      }
+
+      /* Forms */
+      input, select {
+        padding: 0.5rem 0.75rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        border-radius: 8px;
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.875rem;
+        transition: border-color 0.15s ease;
+      }
+
+      input:focus, select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-subtle);
+      }
+
+      input::placeholder {
+        color: var(--text-muted);
+      }
+
+      select {
+        cursor: pointer;
+      }
+
+      /* Panels */
+      .panel {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .panel-header {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 500;
+        font-size: 0.875rem;
+      }
+
+      .panel-body {
+        padding: 1rem;
+      }
+
+      /* Tables */
+      .table-scroll {
+        max-height: calc(100vh - 280px);
+        overflow-y: auto;
       }
 
       table {
@@ -123,87 +307,87 @@
       }
 
       th, td {
-        padding: 0.75rem;
+        padding: 0.75rem 1rem;
         text-align: left;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid var(--border-subtle);
       }
 
       th {
         color: var(--text-muted);
         font-weight: 500;
         text-transform: uppercase;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         letter-spacing: 0.05em;
+        background: var(--bg-elevated);
+        position: sticky;
+        top: 0;
+        z-index: 1;
       }
 
-      tr:hover td {
-        background: var(--surface);
+      tbody tr {
+        transition: background 0.1s ease;
       }
 
+      tbody tr:hover {
+        background: var(--bg-elevated);
+      }
+
+      /* Methods */
       .method {
+        font-family: 'JetBrains Mono', monospace;
         font-weight: 600;
-        padding: 0.125rem 0.375rem;
-        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        padding: 0.125rem 0.5rem;
+        border-radius: 4px;
       }
 
-      .method-get { color: var(--success); }
-      .method-post { color: var(--accent); }
-      .method-put { color: var(--warning); }
-      .method-delete { color: var(--error); }
+      .method-get { color: var(--success); background: var(--success-bg); }
+      .method-post { color: var(--info); background: var(--info-bg); }
+      .method-put { color: var(--warning); background: var(--warning-bg); }
+      .method-patch { color: var(--warning); background: var(--warning-bg); }
+      .method-delete { color: var(--error); background: var(--error-bg); }
 
+      /* Status */
       .status {
+        font-family: 'JetBrains Mono', monospace;
         font-weight: 500;
+        font-size: 0.8rem;
       }
 
       .status-2xx { color: var(--success); }
-      .status-3xx { color: var(--accent); }
+      .status-3xx { color: var(--info); }
       .status-4xx { color: var(--warning); }
       .status-5xx { color: var(--error); }
       .status-pending { color: var(--text-muted); }
 
+      /* Filters */
       .filters {
         display: flex;
         gap: 0.5rem;
         margin-bottom: 1rem;
+        flex-wrap: wrap;
       }
 
-      .filters input, .filters select {
-        padding: 0.5rem;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-        border-radius: 0.375rem;
-        font-size: 0.875rem;
-      }
-
-      .filters input::placeholder {
-        color: var(--text-muted);
-      }
-
-      .panel {
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: 0.5rem;
-        overflow: hidden;
-      }
-
-      .table-scroll {
-        max-height: calc(100vh - 200px);
-        overflow-y: auto;
-      }
-
-      .panel-header {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .panel-body {
+      /* Code blocks */
+      .code-block {
+        background: var(--bg-deep);
         padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        max-height: 300px;
+        overflow-y: auto;
+        line-height: 1.6;
       }
 
+      .code-block pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      /* Detail grid */
       .detail-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
@@ -240,27 +424,7 @@
         overflow: auto;
       }
 
-      .detail-section {
-        margin-bottom: 1rem;
-      }
-
-      .detail-section h3 {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        color: var(--text-muted);
-        margin-bottom: 0.5rem;
-      }
-
-      .code-block {
-        background: var(--bg);
-        padding: 1rem;
-        border-radius: 0.375rem;
-        overflow-x: auto;
-        font-size: 0.8rem;
-        max-height: 300px;
-        overflow-y: auto;
-      }
-
+      /* Empty state */
       .empty-state {
         text-align: center;
         padding: 3rem;
@@ -271,13 +435,61 @@
         margin-bottom: 0.5rem;
       }
 
+      .empty-state p:first-child {
+        color: var(--text-secondary);
+        font-size: 1rem;
+      }
+
+      /* Links */
       a {
         color: var(--accent);
         text-decoration: none;
+        transition: color 0.15s ease;
       }
 
       a:hover {
-        text-decoration: underline;
+        color: var(--accent-hover);
+      }
+
+      /* User badge */
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .user-info .username {
+        color: var(--text-muted);
+        font-size: 0.875rem;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        header {
+          padding: 0.75rem 1rem;
+        }
+
+        .header-title .separator,
+        .header-title .page {
+          display: none;
+        }
+
+        .container {
+          padding: 1rem;
+        }
+
+        .detail-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .filters {
+          flex-direction: column;
+        }
+
+        .filters input,
+        .filters select {
+          width: 100%;
+        }
       }
     </style>
     <script defer src="https://cdn.jsdelivr.net/npm/phoenix@1.7.21/priv/static/phoenix.min.js"></script>
@@ -295,14 +507,31 @@
     <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
   </head>
   <body>
-    <header>
-      <h1>
-        <span>Burrow</span> Request Inspector
-      </h1>
-      <span class="badge badge-live">LIVE</span>
-    </header>
-    <div class="container">
-      <%= @inner_content %>
+    <!-- Animated tunnel background -->
+    <div class="tunnel-bg">
+      <div class="tunnel-ring"></div>
+      <div class="tunnel-ring"></div>
+      <div class="tunnel-ring"></div>
+      <div class="tunnel-ring"></div>
+      <div class="tunnel-ring"></div>
+      <div class="tunnel-ring"></div>
+    </div>
+
+    <div class="app-container">
+      <header>
+        <a href="/inspector" class="header-brand">
+          <img src={"/images/burrow_tunnel_logo.png"} alt="Burrow" class="header-logo" />
+          <div class="header-title">
+            <span class="brand">burrow</span>
+            <span class="separator">/</span>
+            <span class="page">inspector</span>
+          </div>
+        </a>
+        <span class="badge badge-live">Live</span>
+      </header>
+      <div class="container">
+        <%= @inner_content %>
+      </div>
     </div>
   </body>
 </html>

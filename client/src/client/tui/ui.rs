@@ -78,7 +78,7 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_request_list(frame: &mut Frame, app: &mut App, area: Rect) {
-    let header_cells = ["METHOD", "PATH", "STATUS", "TIME"]
+    let header_cells = ["TIME", "METHOD", "PATH", "STATUS", "DURATION"]
         .iter()
         .map(|h| Cell::from(*h).style(Style::default().fg(Color::Yellow).bold()));
     let header = Row::new(header_cells).height(1).bottom_margin(1);
@@ -90,8 +90,10 @@ fn draw_request_list(frame: &mut Frame, app: &mut App, area: Rect) {
             .duration_ms
             .map(|d| format!("{}ms", d))
             .unwrap_or_else(|| "...".to_string());
+        let timestamp = req.timestamp.format("%H:%M:%S").to_string();
 
         Row::new(vec![
+            Cell::from(timestamp).style(Style::default().fg(Color::DarkGray)),
             Cell::from(req.method.clone()).style(method_style),
             Cell::from(truncate_path(&req.path, 40)),
             Cell::from(
@@ -105,6 +107,7 @@ fn draw_request_list(frame: &mut Frame, app: &mut App, area: Rect) {
     });
 
     let widths = [
+        Constraint::Length(10),
         Constraint::Length(8),
         Constraint::Min(20),
         Constraint::Length(8),

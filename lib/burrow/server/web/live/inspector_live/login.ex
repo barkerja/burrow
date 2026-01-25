@@ -7,7 +7,6 @@ defmodule Burrow.Server.Web.InspectorLive.Login do
 
   @impl true
   def mount(_params, session, socket) do
-    # Check if already logged in
     case session["current_user"] do
       nil ->
         {:ok, socket}
@@ -20,30 +19,125 @@ defmodule Burrow.Server.Web.InspectorLive.Login do
   @impl true
   def render(assigns) do
     ~H"""
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh;">
-      <div class="panel" style="max-width: 400px; width: 100%;">
-        <div class="panel-header">
-          <span>Sign in to Inspector</span>
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
         </div>
-        <div class="panel-body" style="text-align: center;">
-          <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-            The request inspector requires authentication.
-            Sign in with your GitHub account to continue.
-          </p>
 
-          <a href="/auth/github" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-            Sign in with GitHub
-          </a>
+        <h1 class="login-title">Sign in to Inspector</h1>
 
-          <p style="color: var(--text-muted); margin-top: 1.5rem; font-size: 0.8rem;">
-            Access is restricted to authorized users only.
-          </p>
-        </div>
+        <p class="login-description">
+          The request inspector requires authentication to view traffic flowing through your tunnels.
+        </p>
+
+        <a href="/auth/github" class="github-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0012 2z"/>
+          </svg>
+          Sign in with GitHub
+        </a>
+
+        <p class="login-notice">
+          Access is restricted to authorized users only.
+        </p>
       </div>
     </div>
+
+    <style>
+      .login-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - 200px);
+        padding: 2rem;
+      }
+
+      .login-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        max-width: 400px;
+        width: 100%;
+        text-align: center;
+      }
+
+      .login-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 1.5rem;
+        background: var(--accent-subtle);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .login-icon svg {
+        width: 28px;
+        height: 28px;
+        color: var(--accent);
+      }
+
+      .login-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .login-description {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+      }
+
+      .github-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        width: 100%;
+        padding: 0.875rem 1.5rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text-primary);
+        font-family: 'Outfit', sans-serif;
+        font-size: 0.95rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+      }
+
+      .github-btn:hover {
+        background: var(--bg-hover);
+        border-color: var(--accent);
+        box-shadow: 0 0 20px var(--accent-glow);
+        transform: translateY(-1px);
+        text-decoration: none;
+        color: var(--text-primary);
+      }
+
+      .github-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .login-notice {
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        margin-top: 1.5rem;
+      }
+    </style>
     """
   end
 end
