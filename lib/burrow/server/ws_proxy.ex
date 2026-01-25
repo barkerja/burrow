@@ -48,7 +48,10 @@ defmodule Burrow.Server.WSProxy do
   @impl WebSock
   def handle_in({data, [opcode: opcode]}, state) do
     # Browser sent a frame, forward to tunnel client
-    Logger.debug("[WSProxy #{state.ws_id}] Browser sent frame: #{opcode}, #{byte_size(data)} bytes")
+    Logger.debug(
+      "[WSProxy #{state.ws_id}] Browser sent frame: #{opcode}, #{byte_size(data)} bytes"
+    )
+
     frame_msg = Message.ws_frame(state.ws_id, opcode, data)
     send(state.tunnel_pid, {:forward_request, Codec.encode!(frame_msg)})
     {:ok, state}
@@ -57,7 +60,10 @@ defmodule Burrow.Server.WSProxy do
   @impl WebSock
   def handle_info({:ws_frame, opcode, data}, state) do
     # Tunnel client sent a frame, forward to browser
-    Logger.debug("[WSProxy #{state.ws_id}] Forwarding frame to browser: #{opcode}, #{byte_size(data)} bytes")
+    Logger.debug(
+      "[WSProxy #{state.ws_id}] Forwarding frame to browser: #{opcode}, #{byte_size(data)} bytes"
+    )
+
     {:push, {opcode, data}, state}
   end
 

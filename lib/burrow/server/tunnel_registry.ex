@@ -7,7 +7,7 @@ defmodule Burrow.Server.TunnelRegistry do
 
   Provides:
   - Registration and lookup of tunnels by subdomain (cluster-wide)
-  - Tracking tunnels by client public key (local node only)
+  - Tracking tunnels by user ID (local node only)
   - Automatic cleanup when connection processes die
   """
 
@@ -20,7 +20,7 @@ defmodule Burrow.Server.TunnelRegistry do
   @type tunnel_info :: %{
           tunnel_id: String.t(),
           subdomain: String.t(),
-          client_public_key: binary(),
+          user_id: String.t() | nil,
           connection_pid: pid(),
           stream_ref: reference(),
           local_host: String.t(),
@@ -30,7 +30,7 @@ defmodule Burrow.Server.TunnelRegistry do
 
   @type state :: %{
           tunnels: %{String.t() => tunnel_info()},
-          by_public_key: %{binary() => MapSet.t(String.t())}
+          by_user_id: %{String.t() => MapSet.t(String.t())}
         }
 
   # Client API
@@ -52,7 +52,7 @@ defmodule Burrow.Server.TunnelRegistry do
 
   - `:tunnel_id` - Unique identifier for the tunnel
   - `:subdomain` - Requested subdomain
-  - `:client_public_key` - Client's Ed25519 public key
+  - `:user_id` - User ID (from API token)
   - `:connection_pid` - PID of the connection process
   - `:stream_ref` - Reference to the HTTP/2 stream
   - `:local_host` - Client's local target host
@@ -101,12 +101,12 @@ defmodule Burrow.Server.TunnelRegistry do
   end
 
   @doc """
-  Returns all tunnels registered by a specific client public key.
+  Returns all tunnels registered by a specific user ID.
   Note: This only returns tunnels on the local node.
   """
-  @spec list_by_client(binary()) :: [tunnel_info()]
-  def list_by_client(public_key) do
-    GenServer.call(__MODULE__, {:list_by_client, public_key})
+  @spec list_by_user(String.t()) :: [tunnel_info()]
+  def list_by_user(user_id) do
+    GenServer.call(__MODULE__, {:list_by_user, user_id})
   end
 
   @doc """
@@ -169,7 +169,7 @@ defmodule Burrow.Server.TunnelRegistry do
       {:error, {:already_started, _pid}} -> :ok
     end
 
-    {:ok, %{tunnels: %{}, by_public_key: %{}}}
+    {:ok, %{tunnels: %{}, by_user_id: %{}}}
   end
 
   @impl true
@@ -197,16 +197,20 @@ defmodule Burrow.Server.TunnelRegistry do
           tunnels = Map.put(state.tunnels, subdomain, tunnel_info)
 
           # Use MapSet for O(1) operations and deduplication
-          by_pk =
-            Map.update(
-              state.by_public_key,
-              params.client_public_key,
-              MapSet.new([subdomain]),
-              &MapSet.put(&1, subdomain)
-            )
+          by_user =
+            if params[:user_id] do
+              Map.update(
+                state.by_user_id,
+                params.user_id,
+                MapSet.new([subdomain]),
+                &MapSet.put(&1, subdomain)
+              )
+            else
+              state.by_user_id
+            end
 
           Logger.info("[TunnelRegistry] Registered tunnel #{subdomain} on #{node()}")
-          {:reply, {:ok, subdomain}, %{state | tunnels: tunnels, by_public_key: by_pk}}
+          {:reply, {:ok, subdomain}, %{state | tunnels: tunnels, by_user_id: by_user}}
         end
     end
   end
@@ -220,8 +224,8 @@ defmodule Burrow.Server.TunnelRegistry do
   end
 
   @impl true
-  def handle_call({:list_by_client, public_key}, _from, state) do
-    subdomains = Map.get(state.by_public_key, public_key, MapSet.new())
+  def handle_call({:list_by_user, user_id}, _from, state) do
+    subdomains = Map.get(state.by_user_id, user_id, MapSet.new())
 
     tunnels =
       subdomains
@@ -266,7 +270,7 @@ defmodule Burrow.Server.TunnelRegistry do
     %{
       tunnel_id: params.tunnel_id,
       subdomain: params.subdomain,
-      client_public_key: params.client_public_key,
+      user_id: params[:user_id],
       connection_pid: params.connection_pid,
       stream_ref: params.stream_ref,
       local_host: params.local_host,
@@ -287,23 +291,27 @@ defmodule Burrow.Server.TunnelRegistry do
         Logger.info("[TunnelRegistry] Unregistered tunnel #{subdomain} from #{node()}")
 
         # Update MapSet and clean up empty sets to prevent memory leak
-        by_pk =
-          case Map.get(state.by_public_key, info.client_public_key) do
-            nil ->
-              state.by_public_key
+        by_user =
+          if info.user_id do
+            case Map.get(state.by_user_id, info.user_id) do
+              nil ->
+                state.by_user_id
 
-            set ->
-              new_set = MapSet.delete(set, subdomain)
+              set ->
+                new_set = MapSet.delete(set, subdomain)
 
-              if MapSet.size(new_set) == 0 do
-                # Remove the key entirely when empty to free memory
-                Map.delete(state.by_public_key, info.client_public_key)
-              else
-                Map.put(state.by_public_key, info.client_public_key, new_set)
-              end
+                if MapSet.size(new_set) == 0 do
+                  # Remove the key entirely when empty to free memory
+                  Map.delete(state.by_user_id, info.user_id)
+                else
+                  Map.put(state.by_user_id, info.user_id, new_set)
+                end
+            end
+          else
+            state.by_user_id
           end
 
-        %{state | tunnels: tunnels, by_public_key: by_pk}
+        %{state | tunnels: tunnels, by_user_id: by_user}
     end
   end
 
