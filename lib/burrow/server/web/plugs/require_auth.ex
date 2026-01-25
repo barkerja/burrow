@@ -1,8 +1,10 @@
 defmodule Burrow.Server.Web.Plugs.RequireAuth do
   @moduledoc """
-  Plug that requires authentication for the request inspector.
+  Plug that requires authentication for protected routes.
 
-  Redirects unauthenticated users to the login page.
+  Validates that the session contains a properly authenticated user
+  with the new WebAuthn-based auth format (must have `id` field).
+  Redirects unauthenticated or old-format sessions to the login page.
   """
 
   import Plug.Conn
@@ -12,13 +14,15 @@ defmodule Burrow.Server.Web.Plugs.RequireAuth do
 
   def call(conn, _opts) do
     case get_session(conn, :current_user) do
-      nil ->
+      %{id: _id} = user ->
         conn
-        |> redirect(to: "/inspector/login")
-        |> halt()
+        |> assign(:current_user, user)
 
-      _user ->
+      _ ->
         conn
+        |> clear_session()
+        |> redirect(to: "/auth/login")
+        |> halt()
     end
   end
 end
