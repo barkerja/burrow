@@ -10,10 +10,6 @@ defmodule Burrow.Server.Web.Plugs.RateLimit do
   @table :rate_limit_buckets
 
   def init(opts) do
-    if :ets.whereis(@table) == :undefined do
-      :ets.new(@table, [:set, :public, :named_table])
-    end
-
     %{
       limit: Keyword.get(opts, :limit, 10),
       window_ms: Keyword.get(opts, :window_ms, 60_000),
@@ -22,6 +18,7 @@ defmodule Burrow.Server.Web.Plugs.RateLimit do
   end
 
   def call(conn, %{limit: limit, window_ms: window_ms, scope: scope}) do
+    ensure_table()
     ip = conn.remote_ip |> :inet.ntoa() |> to_string()
     key = {scope, ip}
     now = System.monotonic_time(:millisecond)
@@ -41,6 +38,12 @@ defmodule Burrow.Server.Web.Plugs.RateLimit do
       _ ->
         :ets.insert(@table, {key, 1, now})
         conn
+    end
+  end
+
+  defp ensure_table do
+    if :ets.whereis(@table) == :undefined do
+      :ets.new(@table, [:set, :public, :named_table])
     end
   end
 end
