@@ -23,6 +23,7 @@ primary_region = 'ewr'
 [env]
   DNS_CLUSTER_QUERY = "burrow.internal"
   FLY_APP_NAME = "burrow"
+  BURROW_PORT = "4000"
 
 [build]
 
@@ -30,7 +31,7 @@ primary_region = 'ewr'
   release_command = "/app/bin/burrow eval 'Burrow.Release.migrate()'"
 
 [http_service]
-  internal_port = 443
+  internal_port = 4000
   force_https = true
   auto_stop_machines = false
   auto_start_machines = true
