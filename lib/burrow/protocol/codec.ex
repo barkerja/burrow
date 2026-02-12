@@ -15,6 +15,8 @@ defmodule Burrow.Protocol.Codec do
     ws_id opcode data data_encoding reason
   )a
 
+  @known_keys_map Map.new(@known_keys, fn atom -> {Atom.to_string(atom), atom} end)
+
   @doc """
   Encodes a message map to JSON.
 
@@ -73,13 +75,7 @@ defmodule Burrow.Protocol.Codec do
   defp atomize_keys(other), do: other
 
   defp atomize_key(key) when is_binary(key) do
-    atom = String.to_atom(key)
-
-    if atom in @known_keys do
-      atom
-    else
-      key
-    end
+    Map.get(@known_keys_map, key, key)
   end
 
   defp atomize_key(key), do: key

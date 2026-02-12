@@ -13,8 +13,8 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
   def mount(%{"id" => request_id}, _session, socket) do
     case RequestStore.get_request(request_id) do
       {:ok, request} ->
-        if connected?(socket) do
-          Phoenix.PubSub.subscribe(Burrow.PubSub, RequestStore.pubsub_topic())
+        if connected?(socket) and is_binary(request.user_id) do
+          Phoenix.PubSub.subscribe(Burrow.PubSub, RequestStore.pubsub_topic(request.user_id))
         end
 
         {:ok,
@@ -226,7 +226,7 @@ defmodule Burrow.Server.Web.InspectorLive.Show do
         <div class="panel curl-panel">
           <div class="panel-header">
             <span>cURL Command</span>
-            <button class="btn btn-sm" onclick={"navigator.clipboard.writeText(document.getElementById('curl-cmd').textContent)"}>
+            <button class="btn btn-sm" id="copy-curl-btn" phx-hook="CopyToClipboard" data-target="curl-cmd">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>

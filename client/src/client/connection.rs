@@ -806,9 +806,13 @@ async fn handle_message(
             let s = state.read().await;
             if let Some(proxy) = s.ws_proxies.get(&ws_id) {
                 let decoded = if data_encoding.as_deref() == Some("base64") {
-                    base64::engine::general_purpose::STANDARD
-                        .decode(&data)
-                        .unwrap_or_else(|_| data.into_bytes())
+                    match base64::engine::general_purpose::STANDARD.decode(&data) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            warn!("Invalid base64 in WsFrame for {}: {}", ws_id, e);
+                            return Ok(());
+                        }
+                    }
                 } else {
                     data.into_bytes()
                 };
@@ -885,9 +889,13 @@ async fn handle_message(
             let s = state.read().await;
             if let Some(conn) = s.tcp_connections.get(&tcp_id) {
                 let decoded = if data_encoding.as_deref() == Some("base64") {
-                    base64::engine::general_purpose::STANDARD
-                        .decode(&data)
-                        .unwrap_or_default()
+                    match base64::engine::general_purpose::STANDARD.decode(&data) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            warn!("Invalid base64 in TcpData for {}: {}", tcp_id, e);
+                            return Ok(());
+                        }
+                    }
                 } else {
                     data.into_bytes()
                 };

@@ -45,7 +45,7 @@ defmodule Burrow.Server.Web.AuthLive.Register do
          )}
 
       Accounts.user_exists?(username) ->
-        {:noreply, assign(socket, :error, "Username is already taken")}
+        {:noreply, assign(socket, :error, "Username is not available")}
 
       true ->
         {challenge, options} = WebAuthn.registration_challenge(username)

@@ -117,6 +117,7 @@ defmodule Burrow.Server.RequestForwarder do
       id: request_id,
       tunnel_id: tunnel_info.tunnel_id,
       subdomain: subdomain,
+      user_id: tunnel_info.user_id,
       method: conn.method,
       path: conn.request_path,
       query_string: conn.query_string,

@@ -2,6 +2,20 @@
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
+# Required secrets (set via `fly secrets set`):
+#   DATABASE_URL          - PostgreSQL connection string
+#   SECRET_KEY_BASE       - Phoenix secret (generate: mix phx.gen.secret)
+#   BURROW_DOMAIN         - Base domain for tunnels (e.g. tunnel.example.com)
+#
+# Optional secrets:
+#   LIVE_VIEW_SALT        - LiveView signing salt (generate: mix phx.gen.secret)
+#   ACME_EMAIL            - Let's Encrypt registration email
+#   ACME_DOMAINS          - Comma-separated domains for TLS certs
+#   CLOUDFLARE_API_TOKEN  - DNS-01 challenge provider
+#   CLOUDFLARE_ZONE_ID    - Cloudflare zone for DNS-01
+#   GITHUB_CLIENT_ID      - Inspector OAuth (optional)
+#   GITHUB_CLIENT_SECRET  - Inspector OAuth (optional)
+#
 
 app = 'burrow'
 primary_region = 'ewr'
@@ -31,9 +45,14 @@ primary_region = 'ewr'
 
 # TCP tunnel ports (40000-40019 = 20 concurrent TCP tunnels)
 # Using handlers = [] for raw TCP pass-through
+# Each port limited to 100 concurrent connections
 [[services]]
   internal_port = 40000
   protocol = "tcp"
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
   [[services.ports]]
     port = 40000
     handlers = []

@@ -19,15 +19,15 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
 
   @impl true
   def mount(_params, session, socket) do
-    if connected?(socket) do
-      Phoenix.PubSub.subscribe(Burrow.PubSub, RequestStore.pubsub_topic())
-      :timer.send_interval(@refresh_interval, self(), :refresh_tunnels)
-    end
-
     current_user = session["current_user"]
     user = if current_user, do: Accounts.get_user(current_user.id)
     is_admin = user && user.is_admin
     user_subdomains = if user, do: Accounts.list_subdomain_names(user.id), else: []
+
+    if connected?(socket) do
+      subscribe_to_updates(user, is_admin)
+      :timer.send_interval(@refresh_interval, self(), :refresh_tunnels)
+    end
 
     tunnels = load_tunnels(user, false, user_subdomains)
     subdomains = load_subdomains(false, user_subdomains)
@@ -41,8 +41,11 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
      |> assign(:is_admin, is_admin)
      |> assign(:admin_mode, false)
      |> assign(:user_subdomains, user_subdomains)
-     |> assign(:request_count, RequestStore.count())
-     |> assign(:unknown_request_count, RequestStore.unknown_request_count())
+     |> assign(:request_count, get_request_count(user, false))
+     |> assign(
+       :unknown_request_count,
+       if(is_admin, do: RequestStore.unknown_request_count(), else: 0)
+     )
      |> assign(:loading, false)
      |> assign(:cursor_bottom, nil)
      |> assign(:has_more_bottom, false)
@@ -68,9 +71,39 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
     |> Enum.filter(fn s -> s in user_subdomains end)
   end
 
+  defp subscribe_to_updates(user, true = _is_admin) when not is_nil(user) do
+    Phoenix.PubSub.subscribe(Burrow.PubSub, RequestStore.pubsub_admin_topic())
+  end
+
+  defp subscribe_to_updates(user, false = _is_admin) when not is_nil(user) do
+    Phoenix.PubSub.subscribe(Burrow.PubSub, RequestStore.pubsub_topic(user.id))
+  end
+
+  defp subscribe_to_updates(nil, _is_admin), do: :ok
+
+  defp get_request_count(_user, true = _admin_mode) do
+    RequestStore.count()
+  end
+
+  defp get_request_count(user, false = _admin_mode) when not is_nil(user) do
+    RequestStore.count(user_id: user.id)
+  end
+
+  defp get_request_count(nil, false = _admin_mode) do
+    0
+  end
+
   @impl true
   def handle_params(params, _uri, socket) do
     tab = parse_tab(params["tab"])
+
+    tab =
+      if tab == :unknown_requests and not socket.assigns.is_admin do
+        :requests
+      else
+        tab
+      end
+
     method_filter = non_empty(params["method"])
     status_filter = parse_status_filter(params["status"])
     subdomain_filter = non_empty(params["subdomain"])
@@ -108,7 +141,10 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
     |> stream(:requests, requests, reset: true, limit: @stream_limit)
     |> assign(:cursor_bottom, cursor_bottom)
     |> assign(:has_more_bottom, has_more?)
-    |> assign(:request_count, RequestStore.count())
+    |> assign(
+      :request_count,
+      get_request_count(socket.assigns.user, socket.assigns.admin_mode)
+    )
   end
 
   defp load_unknown_requests(socket) do
@@ -138,10 +174,17 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
   end
 
   def handle_info({:request_store, {:request_logged, request}}, socket) do
+    owns_subdomain =
+      socket.assigns.admin_mode or request.subdomain in socket.assigns.user_subdomains
+
     socket =
-      socket
-      |> update(:request_count, &(&1 + 1))
-      |> maybe_insert_request(request)
+      if owns_subdomain do
+        socket
+        |> update(:request_count, &(&1 + 1))
+        |> maybe_insert_request(request)
+      else
+        socket
+      end
 
     {:noreply, socket}
   end
@@ -181,22 +224,26 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
   end
 
   def handle_info({:request_store, {:unknown_request_logged, request}}, socket) do
-    socket =
-      socket
-      |> update(:unknown_request_count, &(&1 + 1))
-
-    socket =
-      if socket.assigns.active_tab == :unknown_requests do
-        stream_insert(socket, :unknown_requests, request, at: 0, limit: @stream_limit)
-      else
+    if socket.assigns.is_admin do
+      socket =
         socket
-      end
+        |> update(:unknown_request_count, &(&1 + 1))
 
-    {:noreply, socket}
+      socket =
+        if socket.assigns.active_tab == :unknown_requests do
+          stream_insert(socket, :unknown_requests, request, at: 0, limit: @stream_limit)
+        else
+          socket
+        end
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:request_store, {:unknown_request_updated, updated_request}}, socket) do
-    if socket.assigns.active_tab == :unknown_requests do
+    if socket.assigns.is_admin and socket.assigns.active_tab == :unknown_requests do
       {:noreply, stream_insert(socket, :unknown_requests, updated_request)}
     else
       {:noreply, socket}
@@ -204,21 +251,25 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
   end
 
   def handle_info({:request_store, :unknown_requests_cleared}, socket) do
-    socket =
-      socket
-      |> assign(:unknown_request_count, 0)
-
-    socket =
-      if socket.assigns.active_tab == :unknown_requests do
+    if socket.assigns.is_admin do
+      socket =
         socket
-        |> stream(:unknown_requests, [], reset: true)
-        |> assign(:unknown_cursor_bottom, nil)
-        |> assign(:unknown_has_more_bottom, false)
-      else
-        socket
-      end
+        |> assign(:unknown_request_count, 0)
 
-    {:noreply, socket}
+      socket =
+        if socket.assigns.active_tab == :unknown_requests do
+          socket
+          |> stream(:unknown_requests, [], reset: true)
+          |> assign(:unknown_cursor_bottom, nil)
+          |> assign(:unknown_has_more_bottom, false)
+        else
+          socket
+        end
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(_msg, socket) do
@@ -419,14 +470,16 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
           Requests
           <span class="tab-count"><%= @request_count %></span>
         </button>
-        <button
-          class={"tab #{if @active_tab == :unknown_requests, do: "active"}"}
-          phx-click="switch-tab"
-          phx-value-tab="unknown_requests"
-        >
-          Unknown
-          <span class={"tab-count #{if @unknown_request_count > 0, do: "warning"}"}><%= @unknown_request_count %></span>
-        </button>
+        <%= if @is_admin do %>
+          <button
+            class={"tab #{if @active_tab == :unknown_requests, do: "active"}"}
+            phx-click="switch-tab"
+            phx-value-tab="unknown_requests"
+          >
+            Unknown
+            <span class={"tab-count #{if @unknown_request_count > 0, do: "warning"}"}><%= @unknown_request_count %></span>
+          </button>
+        <% end %>
       </div>
 
       <%= if @active_tab == :requests do %>
@@ -1043,10 +1096,18 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
       |> maybe_add_filter(:subdomain, assigns.subdomain_filter)
       |> maybe_add_filter(:path_pattern, non_empty(assigns.path_filter))
 
-    if assigns.admin_mode or assigns.subdomain_filter do
-      filters
-    else
-      [{:subdomains_in, assigns.user_subdomains} | filters]
+    cond do
+      assigns.admin_mode ->
+        filters
+
+      assigns.subdomain_filter ->
+        filters
+
+      assigns.user ->
+        [{:user_id, assigns.user.id} | filters]
+
+      true ->
+        [{:user_id, nil} | filters]
     end
   end
 
@@ -1073,11 +1134,5 @@ defmodule Burrow.Server.Web.InspectorLive.Index do
   end
 
   defp path_matches?(nil, _pattern), do: false
-
-  defp path_matches?(path, pattern) do
-    case Regex.compile(pattern) do
-      {:ok, regex} -> Regex.match?(regex, path)
-      _ -> true
-    end
-  end
+  defp path_matches?(path, pattern), do: String.contains?(path, pattern)
 end

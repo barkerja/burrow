@@ -718,7 +718,11 @@ fn format_headers(headers: &[(String, String)]) -> String {
     headers
         .iter()
         .map(|(k, v)| {
-            let display_value = if k.to_lowercase() == "authorization" {
+            let lower_key = k.to_lowercase();
+            let display_value = if lower_key == "authorization"
+                || lower_key == "cookie"
+                || lower_key == "set-cookie"
+            {
                 "***".to_string()
             } else if v.len() > 60 {
                 format!("{}...", &v[..57])

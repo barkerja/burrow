@@ -35,7 +35,7 @@ RUN mix release
 FROM alpine:3.21 AS runtime
 
 # Install runtime dependencies - must match OpenSSL from build
-RUN apk add --no-cache libstdc++ libcrypto3 libssl3 ncurses-libs
+RUN apk add --no-cache libstdc++ libcrypto3 libssl3 ncurses-libs libcap
 
 WORKDIR /app
 
@@ -51,21 +51,23 @@ RUN mkdir -p /var/lib/burrow/acme && \
 COPY --from=builder /app/_build/prod/rel/burrow ./
 RUN chown -R burrow:burrow /app
 
+# Allow binding to privileged ports without root
+RUN setcap 'cap_net_bind_service=+ep' /app/bin/burrow
+
 # Set runtime environment
 ENV HOME=/app
 ENV MIX_ENV=prod
 ENV BURROW_MODE=server
 ENV ACME_STORAGE_DIR=/var/lib/burrow/acme
 
-# Switch to non-root user (comment out if binding to ports < 1024)
-# USER burrow
+USER burrow
 
 # Expose ports (HTTP, HTTPS, and TCP tunnel range)
 EXPOSE 443 80 40000-40099
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${HTTP_PORT:-80}/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${HTTP_PORT:-80}/health 2>/dev/null || exit 1
 
 # Start the application
 CMD ["bin/burrow", "start"]

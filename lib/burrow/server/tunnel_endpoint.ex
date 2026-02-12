@@ -14,16 +14,7 @@ defmodule Burrow.Server.TunnelEndpoint do
   plug(:match)
   plug(:dispatch)
 
-  # CORS preflight for tunnel requests
-  options _ do
-    conn
-    |> put_resp_header("access-control-allow-origin", "*")
-    |> put_resp_header("access-control-allow-methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-    |> put_resp_header("access-control-allow-headers", "content-type, authorization")
-    |> send_resp(200, "")
-  end
-
-  # All requests get forwarded through the tunnel
+  # All requests (including OPTIONS/CORS preflight) get forwarded through the tunnel
   match _ do
     case extract_subdomain(conn) do
       {:ok, subdomain} ->
