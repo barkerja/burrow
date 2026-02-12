@@ -80,7 +80,7 @@ if config_env() == :prod do
 
   # Production server configuration
   server_config = [
-    port: String.to_integer(System.get_env("BURROW_PORT") || "443"),
+    port: String.to_integer(System.get_env("BURROW_PORT") || "4000"),
     base_domain: base_domain
   ]
 
