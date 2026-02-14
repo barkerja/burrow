@@ -783,7 +783,7 @@ async fn handle_message(
                         }
                     }
                     Err(e) => {
-                        error!("WebSocket upgrade failed for {}: {}", ws_id_clone, e);
+                        warn!("WebSocket upgrade failed for {}: {}", ws_id_clone, e);
                         let msg = OutgoingMessage::WsClose {
                             ws_id: ws_id_clone,
                             code: 1011,
