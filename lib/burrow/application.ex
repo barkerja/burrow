@@ -23,13 +23,17 @@ defmodule Burrow.Application do
 
   @impl true
   def start(_type, _args) do
-    children = children_for_mode(mode())
+    children = base_children() ++ children_for_mode(mode())
     opts = [strategy: :one_for_one, name: Burrow.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
   defp mode do
     Application.get_env(:burrow, :mode, :none)
+  end
+
+  defp base_children do
+    if Burrow.Repo.enabled?(), do: [Burrow.Repo], else: []
   end
 
   defp children_for_mode(:server) do

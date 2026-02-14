@@ -14,7 +14,7 @@ fn get_client() -> &'static Client {
             .redirect(reqwest::redirect::Policy::none())
             .pool_max_idle_per_host(10)
             .build()
-            .expect("failed to create HTTP client")
+            .unwrap_or_else(|_| Client::new())
     })
 }
 

@@ -57,15 +57,14 @@ ENV MIX_ENV=prod
 ENV BURROW_MODE=server
 ENV ACME_STORAGE_DIR=/var/lib/burrow/acme
 
-# Switch to non-root user (comment out if binding to ports < 1024)
-# USER burrow
+USER burrow
 
 # Expose ports (HTTP, HTTPS, and TCP tunnel range)
-EXPOSE 443 80 40000-40099
+EXPOSE 4000 40000-40099
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${HTTP_PORT:-80}/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health 2>/dev/null || exit 1
 
 # Start the application
 CMD ["bin/burrow", "start"]

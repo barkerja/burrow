@@ -59,7 +59,9 @@ defmodule Burrow.MixProject do
       {:castore, "~> 1.0"},
       # Background jobs
       {:oban, "~> 2.20"},
-      {:oban_web, "~> 2.11"}
+      {:oban_web, "~> 2.11"},
+      # Security auditing
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
 end

@@ -13,7 +13,7 @@ defmodule Burrow.Server.RequestStore do
   alias Burrow.Queries.RequestQuery
   alias Burrow.Queries.UnknownRequestQuery
 
-  @pubsub_topic "request_inspector"
+  @pubsub_admin_topic "request_inspector:admin"
   @max_body_size 64 * 1024
 
   @doc """
@@ -22,6 +22,7 @@ defmodule Burrow.Server.RequestStore do
   def log_request(request_data) do
     data =
       request_data
+      |> Map.put_new(:user_id, nil)
       |> Map.put_new(:status, nil)
       |> Map.put_new(:response_headers, [])
       |> Map.put_new(:response_body, nil)
@@ -122,9 +123,14 @@ defmodule Burrow.Server.RequestStore do
 
   @doc """
   Returns the count of stored requests.
+
+  ## Options
+  - `:subdomains_in` - Filter by list of subdomains
+  - `:method` - Filter by HTTP method
+  - `:status` - Filter by status code or list
   """
-  def count do
-    RequestQuery.count()
+  def count(opts \\ []) do
+    RequestQuery.count(opts)
   end
 
   @doc """
@@ -137,9 +143,14 @@ defmodule Burrow.Server.RequestStore do
   end
 
   @doc """
-  Returns the PubSub topic for request updates.
+  Returns the PubSub topic for a specific user's request updates.
   """
-  def pubsub_topic, do: @pubsub_topic
+  def pubsub_topic(user_id) when is_binary(user_id), do: "request_inspector:user:#{user_id}"
+
+  @doc """
+  Returns the PubSub topic for admin request updates (all requests).
+  """
+  def pubsub_admin_topic, do: @pubsub_admin_topic
 
   @doc """
   Updates a request with IP geolocation info.
@@ -269,13 +280,51 @@ defmodule Burrow.Server.RequestStore do
     |> Oban.insert()
   end
 
-  defp broadcast_update(message) do
+  defp broadcast_update({event, %{user_id: user_id} = data})
+       when event in [:request_logged, :response_logged, :request_updated] and
+              is_binary(user_id) do
+    message = {:request_store, {event, data}}
+
+    Phoenix.PubSub.broadcast(Burrow.PubSub, pubsub_topic(user_id), message)
+    Phoenix.PubSub.broadcast(Burrow.PubSub, @pubsub_admin_topic, message)
+  rescue
+    _ -> :ok
+  end
+
+  defp broadcast_update({event, data})
+       when event in [:unknown_request_logged, :unknown_request_updated] do
     Phoenix.PubSub.broadcast(
       Burrow.PubSub,
-      @pubsub_topic,
-      {:request_store, message}
+      @pubsub_admin_topic,
+      {:request_store, {event, data}}
     )
   rescue
     _ -> :ok
+  end
+
+  defp broadcast_update(:cleared) do
+    Phoenix.PubSub.broadcast(
+      Burrow.PubSub,
+      @pubsub_admin_topic,
+      {:request_store, :cleared}
+    )
+  rescue
+    _ -> :ok
+  end
+
+  defp broadcast_update(:unknown_requests_cleared) do
+    Phoenix.PubSub.broadcast(
+      Burrow.PubSub,
+      @pubsub_admin_topic,
+      {:request_store, :unknown_requests_cleared}
+    )
+  rescue
+    _ -> :ok
+  end
+
+  defp broadcast_update({event, data}) do
+    Logger.debug(
+      "[RequestStore] Skipping broadcast for #{event} - missing user_id in #{inspect(Map.keys(data))}"
+    )
   end
 end

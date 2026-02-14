@@ -10,7 +10,7 @@ config :burrow,
 config :burrow, Burrow.Server.Web.Endpoint,
   url: [host: "localhost"],
   server: false,
-  secret_key_base: "generate_a_proper_secret_for_production_use_please_this_is_just_dev",
+  secret_key_base: "e6f8792713a91dc4dffbe7e18d6182fe1a3fe08976816cfb4cac2d9b4d41e9b9",
   live_view: [signing_salt: "burrow_inspector_salt"],
   render_errors: [formats: [html: Burrow.Server.Web.ErrorHTML], layout: false],
   pubsub_server: Burrow.PubSub

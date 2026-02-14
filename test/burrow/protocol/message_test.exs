@@ -3,15 +3,23 @@ defmodule Burrow.Protocol.MessageTest do
 
   alias Burrow.Protocol.Message
 
-  describe "register_tunnel/3" do
-    test "builds correct structure" do
-      attestation = %{public_key: "pk123", timestamp: 123, signature: "sig"}
-      msg = Message.register_tunnel(attestation, "localhost", 3000)
+  describe "register_tunnel/4" do
+    test "builds correct structure with token" do
+      msg = Message.register_tunnel("brw_test_token", "localhost", 3000)
 
       assert msg.type == "register_tunnel"
-      assert msg.attestation == attestation
+      assert msg.token == "brw_test_token"
       assert msg.local_host == "localhost"
       assert msg.local_port == 3000
+      assert msg.requested_subdomain == nil
+    end
+
+    test "includes requested subdomain when provided" do
+      msg = Message.register_tunnel("brw_test_token", "localhost", 3000, "myapp")
+
+      assert msg.type == "register_tunnel"
+      assert msg.token == "brw_test_token"
+      assert msg.requested_subdomain == "myapp"
     end
   end
 

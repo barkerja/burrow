@@ -1,0 +1,7 @@
+[advisories]
+ignore = [
+    # paste - unmaintained, transitive dep via ratatui
+    "RUSTSEC-2024-0436",
+    # lru - unsound IterMut, transitive dep via ratatui
+    "RUSTSEC-2026-0002",
+]

@@ -10,10 +10,12 @@ defmodule Burrow.Protocol.Codec do
   @known_keys ~w(
     type timestamp tunnel_id subdomain full_url request_id
     method path query_string headers body body_encoding status
-    attestation public_key signature requested_subdomain
+    token attestation public_key signature requested_subdomain
     local_host local_port code message
     ws_id opcode data data_encoding reason
   )a
+
+  @known_keys_map Map.new(@known_keys, fn atom -> {Atom.to_string(atom), atom} end)
 
   @doc """
   Encodes a message map to JSON.
@@ -73,13 +75,7 @@ defmodule Burrow.Protocol.Codec do
   defp atomize_keys(other), do: other
 
   defp atomize_key(key) when is_binary(key) do
-    atom = String.to_atom(key)
-
-    if atom in @known_keys do
-      atom
-    else
-      key
-    end
+    Map.get(@known_keys_map, key, key)
   end
 
   defp atomize_key(key), do: key

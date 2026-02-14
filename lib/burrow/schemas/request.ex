@@ -16,6 +16,7 @@ defmodule Burrow.Schemas.Request do
   schema "requests" do
     field(:tunnel_id, :string)
     field(:subdomain, :string)
+    field(:user_id, :binary_id)
     field(:method, :string)
     field(:path, :string)
     field(:query_string, :string)
@@ -41,7 +42,7 @@ defmodule Burrow.Schemas.Request do
 
   @required_fields ~w(id subdomain method path started_at)a
   @optional_fields ~w(
-    tunnel_id query_string headers body status response_headers response_body
+    tunnel_id user_id query_string headers body status response_headers response_body
     duration_ms completed_at request_size response_size client_ip user_agent
     content_type response_content_type referer ip_info
   )a
@@ -85,6 +86,7 @@ defmodule Burrow.Schemas.Request do
       id: request_map.id,
       tunnel_id: Map.get(request_map, :tunnel_id),
       subdomain: request_map.subdomain,
+      user_id: Map.get(request_map, :user_id),
       method: request_map.method,
       path: request_map.path,
       query_string: Map.get(request_map, :query_string),
@@ -124,6 +126,7 @@ defmodule Burrow.Schemas.Request do
       id: request.id,
       tunnel_id: request.tunnel_id,
       subdomain: request.subdomain,
+      user_id: request.user_id,
       method: request.method,
       path: request.path,
       query_string: request.query_string,

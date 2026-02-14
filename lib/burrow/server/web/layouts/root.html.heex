@@ -502,8 +502,8 @@
         }
       }
     </style>
-    <script defer src="https://cdn.jsdelivr.net/npm/phoenix@1.7.21/priv/static/phoenix.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/phoenix_live_view@1.1.19/priv/static/phoenix_live_view.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/phoenix@1.7.21/priv/static/phoenix.min.js" integrity="sha384-9RuJ1MamPSN1a0pI4iFxrNPql5/iUtKoOiWCh2oTGyDqWT9o7no9kMyfkf7fKxsN" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/phoenix_live_view@1.1.19/priv/static/phoenix_live_view.min.js" integrity="sha384-DOhzfotO5r06FgFMJjvbWsVQI8GC21GvlPuG1MOTJIv1XkxOVX2yulQDeGxpyRCU" crossorigin="anonymous"></script>
     <script>
       const Hooks = {};
 
@@ -559,6 +559,16 @@
         }
       }
       customElements.define('local-time', LocalTime);
+
+      Hooks.CopyToClipboard = {
+        mounted() {
+          this.el.addEventListener("click", () => {
+            const targetId = this.el.dataset.target;
+            const text = document.getElementById(targetId)?.textContent || "";
+            navigator.clipboard.writeText(text);
+          });
+        }
+      };
 
       Hooks.InfiniteScroll = {
         mounted() {
@@ -671,7 +681,10 @@
               if (response.ok) {
                 const data = await response.json();
                 if (data.redirect) {
-                  window.location.href = data.redirect;
+                  const url = new URL(data.redirect, window.location.origin);
+                  if (url.origin === window.location.origin) {
+                    window.location.href = url.href;
+                  }
                 }
               }
             } catch (error) {

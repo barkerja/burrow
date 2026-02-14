@@ -155,6 +155,7 @@ defmodule Burrow.Queries.RequestQuery do
     |> filter_status(Keyword.get(opts, :status))
     |> filter_subdomain(Keyword.get(opts, :subdomain))
     |> filter_subdomains_in(Keyword.get(opts, :subdomains_in))
+    |> filter_user_id(Keyword.get(opts, :user_id))
     |> filter_path_pattern(Keyword.get(opts, :path_pattern))
   end
 
@@ -182,11 +183,15 @@ defmodule Burrow.Queries.RequestQuery do
   defp filter_subdomains_in(query, []), do: where(query, [r], false)
   defp filter_subdomains_in(query, subdomains), do: where(query, [r], r.subdomain in ^subdomains)
 
+  defp filter_user_id(query, nil), do: query
+  defp filter_user_id(query, user_id), do: where(query, [r], r.user_id == ^user_id)
+
   defp filter_path_pattern(query, nil), do: query
   defp filter_path_pattern(query, ""), do: query
 
   defp filter_path_pattern(query, pattern) do
-    where(query, [r], fragment("? ~ ?", r.path, ^pattern))
+    escaped = pattern |> String.replace("%", "\\%") |> String.replace("_", "\\_")
+    where(query, [r], ilike(r.path, ^"%#{escaped}%"))
   end
 
   defp apply_cursor(query, nil, _direction), do: query

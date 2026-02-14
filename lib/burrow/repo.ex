@@ -6,4 +6,7 @@ defmodule Burrow.Repo do
   use Ecto.Repo,
     otp_app: :burrow,
     adapter: Ecto.Adapters.Postgres
+
+  @spec enabled?() :: boolean()
+  def enabled?, do: Application.get_env(:burrow, __MODULE__) != nil
 end

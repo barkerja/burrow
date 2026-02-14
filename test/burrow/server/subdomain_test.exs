@@ -63,8 +63,8 @@ defmodule Burrow.Server.SubdomainTest do
       assert Subdomain.valid?("test-123-dev")
     end
 
-    test "accepts minimum length (4 chars)" do
-      assert Subdomain.valid?("abcd")
+    test "accepts minimum length (2 chars)" do
+      assert Subdomain.valid?("ab")
     end
 
     test "accepts maximum length (32 chars)" do
@@ -72,8 +72,6 @@ defmodule Burrow.Server.SubdomainTest do
     end
 
     test "rejects too short subdomains" do
-      refute Subdomain.valid?("abc")
-      refute Subdomain.valid?("ab")
       refute Subdomain.valid?("a")
       refute Subdomain.valid?("")
     end

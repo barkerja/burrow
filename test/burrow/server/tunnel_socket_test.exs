@@ -1,15 +1,19 @@
 defmodule Burrow.Server.TunnelSocketTest do
-  use ExUnit.Case, async: false
+  use Burrow.DataCase, async: false
 
   alias Burrow.Server.TunnelSocket
   alias Burrow.Protocol.{Codec, Message}
-  alias Burrow.Crypto.{Keypair, Attestation}
+  alias Burrow.Accounts
 
   setup do
     start_supervised!({Burrow.Server.TunnelRegistry, name: Burrow.Server.TunnelRegistry})
     start_supervised!({Burrow.Server.PendingRequests, name: Burrow.Server.PendingRequests})
     Application.put_env(:burrow, :server, base_domain: "burrow.test")
-    :ok
+
+    {:ok, user} = Accounts.create_user(%{username: "testuser"})
+    {:ok, _token_record, token_string} = Accounts.create_api_token(user.id, %{name: "test"})
+
+    [user: user, token: token_string]
   end
 
   describe "init/1" do
@@ -21,18 +25,10 @@ defmodule Burrow.Server.TunnelSocketTest do
   end
 
   describe "handle_in/2 - registration" do
-    test "registers tunnel with valid attestation" do
+    test "registers tunnel with valid token", ctx do
       {:ok, state} = TunnelSocket.init([])
 
-      keypair = Keypair.generate()
-      attestation = Attestation.create(keypair)
-
-      message =
-        Message.register_tunnel(
-          Attestation.to_map(attestation),
-          "localhost",
-          3000
-        )
+      message = Message.register_tunnel(ctx.token, "localhost", 3000)
 
       {:reply, :ok, {:text, response_json}, new_state} =
         TunnelSocket.handle_in({Codec.encode!(message), [opcode: :text]}, state)
@@ -45,71 +41,41 @@ defmodule Burrow.Server.TunnelSocketTest do
       assert map_size(new_state.tunnels) == 1
     end
 
-    test "rejects expired attestation" do
+    test "rejects missing token" do
       {:ok, state} = TunnelSocket.init([])
 
-      keypair = Keypair.generate()
-      # Create attestation with old timestamp
-      old_timestamp = System.system_time(:second) - 600
-      message_to_sign = "burrow:register:#{old_timestamp}:"
-      signature = Keypair.sign(message_to_sign, keypair)
-
-      attestation_map = %{
-        public_key: Base.encode64(keypair.public_key),
-        timestamp: old_timestamp,
-        signature: Base.encode64(signature),
-        requested_subdomain: nil
-      }
-
-      message = Message.register_tunnel(attestation_map, "localhost", 3000)
+      message = Message.register_tunnel(nil, "localhost", 3000)
 
       {:reply, :ok, {:text, response_json}, new_state} =
         TunnelSocket.handle_in({Codec.encode!(message), [opcode: :text]}, state)
 
       response = Codec.decode!(response_json)
       assert response.type == "error"
-      assert response.code == "attestation_expired"
+      assert response.code == "invalid_token"
       assert new_state.status == :awaiting_registration
     end
 
-    test "rejects invalid signature" do
+    test "rejects invalid token format" do
       {:ok, state} = TunnelSocket.init([])
 
-      keypair = Keypair.generate()
-      other_keypair = Keypair.generate()
-
-      # Sign with different key
-      timestamp = System.system_time(:second)
-      message_to_sign = "burrow:register:#{timestamp}:"
-      signature = Keypair.sign(message_to_sign, other_keypair)
-
-      attestation_map = %{
-        public_key: Base.encode64(keypair.public_key),
-        timestamp: timestamp,
-        signature: Base.encode64(signature),
-        requested_subdomain: nil
-      }
-
-      message = Message.register_tunnel(attestation_map, "localhost", 3000)
+      message = Message.register_tunnel("not-a-valid-token", "localhost", 3000)
 
       {:reply, :ok, {:text, response_json}, new_state} =
         TunnelSocket.handle_in({Codec.encode!(message), [opcode: :text]}, state)
 
       response = Codec.decode!(response_json)
       assert response.type == "error"
-      assert response.code == "invalid_signature"
+      assert response.code == "invalid_token"
       assert new_state.status == :awaiting_registration
     end
   end
 
   describe "handle_in/2 - tunnel_response" do
-    test "completes pending request with response" do
+    test "completes pending request with response", ctx do
       {:ok, state} = TunnelSocket.init([])
 
-      # First register a tunnel
-      keypair = Keypair.generate()
-      attestation = Attestation.create(keypair)
-      reg_message = Message.register_tunnel(Attestation.to_map(attestation), "localhost", 3000)
+      # Register a tunnel first
+      reg_message = Message.register_tunnel(ctx.token, "localhost", 3000)
 
       {:reply, :ok, {:text, _}, state} =
         TunnelSocket.handle_in({Codec.encode!(reg_message), [opcode: :text]}, state)
@@ -145,13 +111,11 @@ defmodule Burrow.Server.TunnelSocketTest do
   end
 
   describe "handle_info/2 - forward_request" do
-    test "sends tunnel request to client" do
+    test "sends tunnel request to client", ctx do
       {:ok, state} = TunnelSocket.init([])
 
-      # First register
-      keypair = Keypair.generate()
-      attestation = Attestation.create(keypair)
-      reg_message = Message.register_tunnel(Attestation.to_map(attestation), "localhost", 3000)
+      # Register a tunnel
+      reg_message = Message.register_tunnel(ctx.token, "localhost", 3000)
 
       {:reply, :ok, {:text, reg_response}, state} =
         TunnelSocket.handle_in({Codec.encode!(reg_message), [opcode: :text]}, state)
@@ -183,13 +147,11 @@ defmodule Burrow.Server.TunnelSocketTest do
   end
 
   describe "terminate/2" do
-    test "unregisters tunnels on disconnect" do
+    test "unregisters tunnels on disconnect", ctx do
       {:ok, state} = TunnelSocket.init([])
 
       # Register a tunnel
-      keypair = Keypair.generate()
-      attestation = Attestation.create(keypair)
-      reg_message = Message.register_tunnel(Attestation.to_map(attestation), "localhost", 3000)
+      reg_message = Message.register_tunnel(ctx.token, "localhost", 3000)
 
       {:reply, :ok, {:text, reg_response}, state} =
         TunnelSocket.handle_in({Codec.encode!(reg_message), [opcode: :text]}, state)

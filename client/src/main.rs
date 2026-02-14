@@ -133,11 +133,10 @@ async fn run_start(
         anyhow::bail!("--no-tui mode requires tunnels to be configured via CLI flags, which have been removed. Use TUI mode instead.");
     }
 
-    // In TUI mode, only log errors
-    let filter = EnvFilter::new("error");
+    // In TUI mode, discard tracing output to prevent corrupting the alternate screen
     tracing_subscriber::registry()
-        .with(filter)
-        .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::new("error"))
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::sink))
         .init();
 
     let (tui_tx, tui_rx) = create_event_channel();

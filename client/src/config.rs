@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 
@@ -14,10 +15,19 @@ pub struct Config {
     pub auth: AuthConfig,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub token: Option<String>,
     pub server: Option<String>,
+}
+
+impl fmt::Debug for AuthConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuthConfig")
+            .field("token", &self.token.as_ref().map(|_| "[REDACTED]"))
+            .field("server", &self.server)
+            .finish()
+    }
 }
 
 impl Config {
@@ -47,7 +57,16 @@ impl Config {
         let contents = toml::to_string_pretty(self).context("Failed to serialize config")?;
 
         fs::write(&path, contents)
-            .with_context(|| format!("Failed to write config file: {}", path.display()))
+            .with_context(|| format!("Failed to write config file: {}", path.display()))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                .with_context(|| format!("Failed to set config file permissions: {}", path.display()))?;
+        }
+
+        Ok(())
     }
 
     pub fn config_path() -> Result<PathBuf> {
