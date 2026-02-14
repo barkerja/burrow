@@ -61,7 +61,7 @@ defmodule Burrow.MixProject do
       {:oban, "~> 2.20"},
       {:oban_web, "~> 2.11"},
       # Security auditing
-      {:mix_audit, "~> 2.1", only: :dev, runtime: false}
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
     ]
   end
 end
