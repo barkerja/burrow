@@ -10,7 +10,7 @@ defmodule Burrow.Protocol.Codec do
   @known_keys ~w(
     type timestamp tunnel_id subdomain full_url request_id
     method path query_string headers body body_encoding status
-    attestation public_key signature requested_subdomain
+    token attestation public_key signature requested_subdomain
     local_host local_port code message
     ws_id opcode data data_encoding reason
   )a

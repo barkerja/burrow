@@ -14,7 +14,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
       params = %{
         tunnel_id: "tid-123",
         subdomain: "myapp",
-        client_public_key: <<1, 2, 3>>,
+        user_id: "user-1",
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -28,7 +28,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
       params1 = %{
         tunnel_id: "tid-1",
         subdomain: "taken",
-        client_public_key: <<1>>,
+        user_id: "user-1",
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -38,7 +38,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
       params2 = %{
         tunnel_id: "tid-2",
         subdomain: "taken",
-        client_public_key: <<2>>,
+        user_id: "user-2",
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -49,13 +49,13 @@ defmodule Burrow.Server.TunnelRegistryTest do
       assert {:error, :subdomain_taken} = TunnelRegistry.register(params2)
     end
 
-    test "allows same client to register multiple subdomains" do
-      pk = <<1, 2, 3>>
+    test "allows same user to register multiple subdomains" do
+      user_id = "user-1"
 
       params1 = %{
         tunnel_id: "tid-1",
         subdomain: "app1",
-        client_public_key: pk,
+        user_id: user_id,
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -65,7 +65,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
       params2 = %{
         tunnel_id: "tid-2",
         subdomain: "app2",
-        client_public_key: pk,
+        user_id: user_id,
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -82,7 +82,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
       params = %{
         tunnel_id: "tid-123",
         subdomain: "myapp",
-        client_public_key: <<1, 2, 3>>,
+        user_id: "user-1",
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -94,7 +94,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
 
       assert info.tunnel_id == "tid-123"
       assert info.subdomain == "myapp"
-      assert info.client_public_key == <<1, 2, 3>>
+      assert info.user_id == "user-1"
       assert info.connection_pid == self()
       assert info.local_host == "localhost"
       assert info.local_port == 3000
@@ -111,7 +111,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
       params = %{
         tunnel_id: "tid-123",
         subdomain: "myapp",
-        client_public_key: <<1, 2, 3>>,
+        user_id: "user-1",
         connection_pid: self(),
         stream_ref: make_ref(),
         local_host: "localhost",
@@ -130,15 +130,15 @@ defmodule Burrow.Server.TunnelRegistryTest do
     end
   end
 
-  describe "list_by_client/1" do
-    test "returns all tunnels for a public key" do
-      pk = <<1, 2, 3>>
+  describe "list_by_user/1" do
+    test "returns all tunnels for a user" do
+      user_id = "user-1"
 
       for i <- 1..3 do
         params = %{
           tunnel_id: "tid-#{i}",
           subdomain: "app#{i}",
-          client_public_key: pk,
+          user_id: user_id,
           connection_pid: self(),
           stream_ref: make_ref(),
           local_host: "localhost",
@@ -148,15 +148,15 @@ defmodule Burrow.Server.TunnelRegistryTest do
         TunnelRegistry.register(params)
       end
 
-      tunnels = TunnelRegistry.list_by_client(pk)
+      tunnels = TunnelRegistry.list_by_user(user_id)
       assert length(tunnels) == 3
 
       subdomains = Enum.map(tunnels, & &1.subdomain) |> Enum.sort()
       assert subdomains == ["app1", "app2", "app3"]
     end
 
-    test "returns empty list for unknown client" do
-      assert TunnelRegistry.list_by_client(<<99, 99, 99>>) == []
+    test "returns empty list for unknown user" do
+      assert TunnelRegistry.list_by_user("unknown-user") == []
     end
   end
 
@@ -170,7 +170,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
           params = %{
             tunnel_id: "tid-123",
             subdomain: "ephemeral",
-            client_public_key: <<1, 2, 3>>,
+            user_id: "user-1",
             connection_pid: self(),
             stream_ref: make_ref(),
             local_host: "localhost",
@@ -210,7 +210,7 @@ defmodule Burrow.Server.TunnelRegistryTest do
         params = %{
           tunnel_id: "tid-#{i}",
           subdomain: "app#{i}",
-          client_public_key: <<i>>,
+          user_id: "user-#{i}",
           connection_pid: self(),
           stream_ref: make_ref(),
           local_host: "localhost",

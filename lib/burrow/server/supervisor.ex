@@ -65,8 +65,7 @@ defmodule Burrow.Server.Supervisor do
     pending_name = Keyword.get(opts, :pending_name, Burrow.Server.PendingRequests)
 
     children = [
-      # Database
-      Burrow.Repo,
+      # Database: Repo is started by Burrow.Application
       # Background jobs
       {Oban, Application.fetch_env!(:burrow, Oban)},
       # PubSub for real-time updates

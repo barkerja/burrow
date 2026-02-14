@@ -9,6 +9,7 @@ defmodule Burrow.Server.EndpointTest do
   setup do
     start_supervised!({Burrow.Server.TunnelRegistry, name: Burrow.Server.TunnelRegistry})
     start_supervised!({Burrow.Server.PendingRequests, name: Burrow.Server.PendingRequests})
+    start_supervised!({Task.Supervisor, name: Burrow.Server.TaskSupervisor})
     start_supervised!(Burrow.Server.Web.Endpoint)
 
     Application.put_env(:burrow, :server, base_domain: "burrow.test")
@@ -117,22 +118,38 @@ defmodule Burrow.Server.EndpointTest do
   end
 
   describe "CORS headers" do
-    test "main domain OPTIONS request returns CORS headers" do
-      conn = conn(:options, "/")
+    test "main domain OPTIONS request returns CORS headers for allowed origin" do
+      conn =
+        conn(:options, "/")
+        |> put_req_header("origin", "https://burrow.test")
+
       conn = %{conn | host: "burrow.test"}
       conn = Dispatcher.call(conn, Dispatcher.init([]))
 
-      assert get_resp_header(conn, "access-control-allow-origin") == ["*"]
+      assert get_resp_header(conn, "access-control-allow-origin") == ["https://burrow.test"]
+      assert get_resp_header(conn, "access-control-allow-methods") != []
       assert conn.status == 200
     end
 
-    test "subdomain OPTIONS request returns CORS headers" do
+    test "main domain OPTIONS request omits CORS header for disallowed origin" do
+      conn =
+        conn(:options, "/")
+        |> put_req_header("origin", "https://evil.example.com")
+
+      conn = %{conn | host: "burrow.test"}
+      conn = Dispatcher.call(conn, Dispatcher.init([]))
+
+      assert get_resp_header(conn, "access-control-allow-origin") == []
+      assert conn.status == 200
+    end
+
+    test "subdomain OPTIONS request forwards through tunnel" do
       conn = conn(:options, "/")
       conn = %{conn | host: "myapp.burrow.test"}
       conn = TunnelEndpoint.call(conn, TunnelEndpoint.init([]))
 
-      assert get_resp_header(conn, "access-control-allow-origin") == ["*"]
-      assert conn.status == 200
+      # Without an active tunnel, OPTIONS gets forwarded and returns 404
+      assert conn.status == 404
     end
   end
 end
